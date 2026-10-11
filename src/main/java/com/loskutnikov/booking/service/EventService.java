@@ -7,11 +7,15 @@ import com.loskutnikov.booking.exception.EventNotFoundException;
 import com.loskutnikov.booking.model.Event;
 import com.loskutnikov.booking.model.Status;
 import com.loskutnikov.booking.repository.EventRepository;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 
 import java.util.List;
 
 @Service
+@Transactional
 public class EventService {
 
     private final EventRepository eventRepository;
@@ -32,16 +36,17 @@ public class EventService {
         return EventResponse.from(saved);
     }
 
+    @Transactional(readOnly = true)
     public EventResponse findById(Long id) {
         Event event = eventRepository.findById(id).orElseThrow(() ->
                 new EventNotFoundException(id));
         return EventResponse.from(event);
     }
 
-    public List<EventResponse> findAll() {
-        return eventRepository.findAll().stream()
-                .map(EventResponse::from)
-                .toList();
+    @Transactional(readOnly = true)
+    public Page<EventResponse> findAll(Pageable pageable) {
+        return eventRepository.findAll(pageable)
+                .map(EventResponse::from);
     }
 
     public EventResponse update(Long id, UpdateEventRequest request) {
@@ -53,8 +58,7 @@ public class EventService {
         event.setVenue(request.venue());
         event.setStatus(request.status());
 
-        Event updated = eventRepository.save(event);
-        return EventResponse.from(updated);
+        return EventResponse.from(event);
     }
 
     public void delete(Long id) {
@@ -63,5 +67,4 @@ public class EventService {
         }
         eventRepository.deleteById(id);
     }
-
 }

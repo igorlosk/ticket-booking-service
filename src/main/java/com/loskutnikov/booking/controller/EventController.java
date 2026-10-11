@@ -6,6 +6,8 @@ import com.loskutnikov.booking.dto.UpdateEventRequest;
 import com.loskutnikov.booking.service.EventService;
 import com.sun.jdi.request.EventRequest;
 import jakarta.validation.Valid;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
@@ -33,8 +35,8 @@ public class EventController {
     }
 
     @GetMapping
-    public List<EventResponse> findAll() {
-        return eventService.findAll();
+    public Page<EventResponse> findAll(Pageable pageable) {
+        return eventService.findAll(pageable);
     }
 
     @GetMapping("/{id}")
