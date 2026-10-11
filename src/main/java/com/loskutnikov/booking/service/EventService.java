@@ -12,8 +12,6 @@ import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
-import java.util.List;
-
 @Service
 @Transactional
 public class EventService {
@@ -32,6 +30,7 @@ public class EventService {
                 request.venue(),
                 Status.AVAILABLE
         );
+        event.setDescription(request.description());
         Event saved = eventRepository.save(event);
         return EventResponse.from(saved);
     }
@@ -57,6 +56,7 @@ public class EventService {
         event.setDate(request.date());
         event.setVenue(request.venue());
         event.setStatus(request.status());
+        event.setDescription(request.description());
 
         return EventResponse.from(event);
     }
