@@ -19,6 +19,8 @@ public record UpdateEventRequest(
         String venue,
 
         @NotNull(message = "Status must not be null")
-        Status status
+        Status status,
+
+        String description
 ) {
 }

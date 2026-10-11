@@ -25,12 +25,23 @@ public class Event {
     @Column(nullable = false, length = 20)
     private Status status;
 
+    @Column(length = 1000)
+    private String description;
+
     public Event(Long id, String name, LocalDateTime date, String venue, Status status) {
         this.id = id;
         this.name = name;
         this.date = date;
         this.venue = venue;
         this.status = status;
+    }
+
+    public String getDescription() {
+        return description;
+    }
+
+    public void setDescription(String description) {
+        this.description = description;
     }
 
     public Event() {

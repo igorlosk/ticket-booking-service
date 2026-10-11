@@ -15,6 +15,10 @@ public record CreateEventRequest(
         LocalDateTime date,
 
         @NotBlank(message = "Venue must not be blank")
-        String venue
+        String venue,
+
+        String description
+
+
 ) {
 }
