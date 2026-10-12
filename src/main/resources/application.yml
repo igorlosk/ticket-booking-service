@@ -36,3 +36,12 @@ logging:
     org.hibernate.SQL: debug
     org.hibernate.type.descriptor.sql.BasicBinder: trace
     liquibase: info
+
+springdoc:
+  api-docs:
+    path: /v3/api-docs          # где доступна спецификация в JSON
+  swagger-ui:
+    path: /swagger-ui.html      # где открывается UI
+    operations-sorter: method   # сортировка эндпоинтов по HTTP-методу
+    tags-sorter: alpha          # сортировка тегов по алфавиту
+  show-actuator: false          # не показывать actuator-эндпоинты (если будут)

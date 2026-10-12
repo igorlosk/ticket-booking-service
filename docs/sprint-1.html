@@ -1,0 +1,349 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Спринт 1 — Первый REST-эндпоинт</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #24292e;
+        }
+        h1 { color: #0366d6; border-bottom: 2px solid #0366d6; padding-bottom: 8px; margin-top: 40px; }
+        h2 { color: #24292e; border-bottom: 1px solid #e1e4e8; padding-bottom: 6px; margin-top: 32px; }
+        h3 { color: #24292e; margin-top: 24px; }
+        code {
+            background: #f6f8fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: "SF Mono", Monaco, Consolas, monospace;
+            font-size: 0.9em;
+            color: #d73a49;
+        }
+        pre {
+            background: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border-left: 4px solid #0366d6;
+            font-size: 0.9em;
+            line-height: 1.45;
+        }
+        pre code { background: none; padding: 0; color: #24292e; }
+        table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+        th, td { border: 1px solid #d1d5da; padding: 8px 12px; text-align: left; }
+        th { background: #f6f8fa; font-weight: 600; }
+        blockquote {
+            border-left: 4px solid #0366d6;
+            padding-left: 16px;
+            color: #6a737d;
+            margin: 16px 0;
+            font-style: italic;
+        }
+        .checklist { list-style: none; padding-left: 0; }
+        .checklist li::before { content: "☐ "; color: #0366d6; font-weight: bold; }
+        .warning { background: #fff5b1; border-left: 4px solid #f9c513; padding: 12px 16px; margin: 16px 0; }
+        .answer { background: #f0fff4; border-left: 4px solid #28a745; padding: 12px 16px; margin: 8px 0; }
+        .question { font-weight: 600; color: #0366d6; margin-top: 20px; }
+        .toc { background: #f6f8fa; padding: 16px 24px; border-radius: 6px; }
+        .toc a { color: #0366d6; text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+        .meta { color: #6a737d; font-size: 0.9em; font-style: italic; margin-bottom: 24px; }
+        .mistake { background: #ffeef0; border-left: 4px solid #d73a49; padding: 12px 16px; margin: 12px 0; }
+        .mistake-title { font-weight: 600; color: #d73a49; margin-bottom: 6px; }
+        @media print {
+            body { margin: 0; max-width: 100%; }
+            h1 { page-break-before: always; }
+            h1:first-of-type { page-break-before: avoid; }
+            pre { page-break-inside: avoid; }
+            table { page-break-inside: avoid; }
+            .mistake { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>Спринт 1: Первый REST-эндпоинт</h1>
+
+<p class="meta">Проект: <strong>Ticket Booking Service</strong> · Стек: Spring Boot 3.5.x, Spring MVC, Jackson</p>
+
+<div class="toc">
+    <strong>Содержание</strong>
+    <ol>
+        <li><a href="#goals">Цели спринта</a></li>
+        <li><a href="#theory">Теория</a></li>
+        <li><a href="#steps">Пошаговая инструкция</a></li>
+        <li><a href="#pitfalls">Подводные камни</a></li>
+        <li><a href="#mistakes">Частые ошибки на практике</a></li>
+        <li><a href="#interview">Вопросы на собеседование</a></li>
+        <li><a href="#checklist">Чеклист самопроверки</a></li>
+    </ol>
+</div>
+
+<h2 id="goals">🎯 Цели спринта</h2>
+<ul>
+    <li>Понять, как Spring MVC обрабатывает HTTP-запросы</li>
+    <li>Создать первый REST-контроллер</li>
+    <li>Освоить аннотации <code>@RestController</code>, <code>@GetMapping</code>, <code>@PathVariable</code>, <code>@RequestParam</code></li>
+    <li>Возвращать JSON через DTO</li>
+    <li>Понять, почему DTO, а не Entity</li>
+</ul>
+
+<h2 id="theory">📚 Теория</h2>
+
+<h3>Как работает Spring MVC</h3>
+
+<pre><code>HTTP-запрос → DispatcherServlet → Controller → Service → JSON-ответ</code></pre>
+
+<p><strong>DispatcherServlet</strong> — центральный сервлет Spring. Находит нужный контроллер по URL и HTTP-методу, вызывает метод, сериализует результат в JSON.</p>
+
+<h3>Ключевые аннотации</h3>
+
+<table>
+    <tr><th>Аннотация</th><th>Что делает</th></tr>
+    <tr><td><code>@RestController</code></td><td>= <code>@Controller</code> + <code>@ResponseBody</code>. Возвращаемые объекты → JSON</td></tr>
+    <tr><td><code>@RequestMapping("/api/v1")</code></td><td>Базовый URL для всех методов контроллера</td></tr>
+    <tr><td><code>@GetMapping("/hello")</code></td><td>HTTP GET на <code>/api/v1/hello</code></td></tr>
+    <tr><td><code>@PostMapping</code></td><td>HTTP POST</td></tr>
+    <tr><td><code>@PutMapping("/{id}")</code></td><td>HTTP PUT с path-параметром</td></tr>
+    <tr><td><code>@DeleteMapping("/{id}")</code></td><td>HTTP DELETE</td></tr>
+    <tr><td><code>@PathVariable</code></td><td>Значение из URL-пути (<code>/events/5</code> → <code>id = 5</code>)</td></tr>
+    <tr><td><code>@RequestParam</code></td><td>Значение из query-строки (<code>?name=Igor</code> → <code>name = "Igor"</code>)</td></tr>
+    <tr><td><code>@RequestBody</code></td><td>Тело запроса (JSON) → Java-объект</td></tr>
+</table>
+
+<h3><code>@PathVariable</code> vs <code>@RequestParam</code></h3>
+
+<table>
+    <tr><th></th><th><code>@PathVariable</code></th><th><code>@RequestParam</code></th></tr>
+    <tr><td>Откуда</td><td>URL-путь</td><td>Query-строка</td></tr>
+    <tr><td>Пример</td><td><code>/events/5</code></td><td><code>/events?status=ACTIVE</code></td></tr>
+    <tr><td>Назначение</td><td>Идентификатор ресурса</td><td>Фильтр, опция</td></tr>
+</table>
+
+<h3>DTO и Jackson</h3>
+
+<p><strong>DTO (Data Transfer Object)</strong> — Java-класс, описывающий структуру JSON.</p>
+
+<p><strong>Jackson</strong> — библиотека сериализации, встроена в Spring Boot:</p>
+<ul>
+    <li>Java-объект → JSON (при <code>@RestController</code>)</li>
+    <li>JSON → Java-объект (при <code>@RequestBody</code>)</li>
+</ul>
+
+<p><strong><code>record</code> (Java 14+)</strong> — идеален для DTO:</p>
+<ul>
+    <li>Неизменяемый</li>
+    <li>Автогенерация конструктора, геттеров, <code>equals</code>, <code>hashCode</code>, <code>toString</code></li>
+    <li>Короче обычного класса</li>
+</ul>
+
+<h3>Формат <code>Instant</code> в JSON</h3>
+
+<p>Jackson сериализует <code>Instant</code> в ISO-8601 с UTC:</p>
+<pre><code>"2026-10-09T12:26:02.119400100Z"</code></pre>
+<p><code>Z</code> в конце означает UTC (zone offset Z = +00:00).</p>
+
+<h2 id="steps">💻 Пошаговая инструкция</h2>
+
+<h3>Шаг 1. Создать структуру пакетов</h3>
+
+<pre><code>com.loskutnikov.booking/
+├── controller/       ← REST-контроллеры
+├── dto/              ← DTO
+├── service/          ← бизнес-логика (позже)
+├── repository/       ← работа с БД (позже)
+└── TicketBookingServiceApplication.java</code></pre>
+
+<h3>Шаг 2. Создать DTO</h3>
+
+<pre><code>package com.loskutnikov.booking.dto;
+
+import java.time.Instant;
+
+public record HelloResponse(String message, Instant timestamp) {
+}</code></pre>
+
+<h3>Шаг 3. Создать контроллер</h3>
+
+<pre><code>package com.loskutnikov.booking.controller;
+
+import com.loskutnikov.booking.dto.HelloResponse;
+import org.springframework.web.bind.annotation.*;
+import java.time.Instant;
+
+@RestController
+@RequestMapping("/api/v1")
+public class HelloController {
+
+    @GetMapping("/hello")
+    public HelloResponse hello(@RequestParam(defaultValue = "world") String name) {
+        return new HelloResponse("Hello, " + name + "!", Instant.now());
+    }
+}</code></pre>
+
+<h3>Шаг 4. Запустить и проверить</h3>
+
+<pre><code>GET http://localhost:8080/api/v1/hello
+→ {"message":"Hello, world!","timestamp":"2026-10-09T12:26:02Z"}
+
+GET http://localhost:8080/api/v1/hello?name=Igor
+→ {"message":"Hello, Igor!","timestamp":"..."}</code></pre>
+
+<h3>Шаг 5. PathVariable и несколько эндпоинтов</h3>
+
+<pre><code>@RestController
+@RequestMapping("/api/v1/events")
+public class EventController {
+
+    @GetMapping("/count")
+    public CountResponse eventsCount(@RequestParam(defaultValue = "1") Integer count) {
+        return new CountResponse(count, Instant.now());
+    }
+
+    @GetMapping("/{id}")
+    public EventResponse eventById(@PathVariable Long id) {
+        return new EventResponse(id, "Event #" + id, Status.AVAILABLE);
+    }
+}</code></pre>
+
+<h2 id="pitfalls">⚠️ Подводные камни</h2>
+
+<table>
+    <tr><th>Проблема</th><th>Что делать</th></tr>
+    <tr><td>Что если <code>?count=abc</code>?</td><td>Spring вернёт <strong>400 Bad Request</strong> (<code>MethodArgumentTypeMismatchException</code>)</td></tr>
+    <tr><td>Что если <code>GET</code> на <code>@PostMapping</code>?</td><td>Spring вернёт <strong>405 Method Not Allowed</strong></td></tr>
+    <tr><td>Конфликт <code>/count</code> и <code>/{id}</code></td><td>Spring выбирает <strong>более специфичный</strong> (<code>/count</code> выиграет). Но дизайн хрупкий — лучше разнести по путям</td></tr>
+    <tr><td><code>LocalDateTime</code> vs <code>Instant</code></td><td>Для timestamp — <code>Instant</code> (с зоной UTC). Для «даты события» — <code>LocalDateTime</code></td></tr>
+    <tr><td>Хардкод в ответе</td><td>Всегда подставляй <code>id</code> из <code>@PathVariable</code>, чтобы видеть реальную работу</td></tr>
+</table>
+
+<h2 id="mistakes">🐞 Частые ошибки на практике</h2>
+
+<div class="mistake">
+    <div class="mistake-title">1. Забыл <code>@RestController</code> — написал <code>@Controller</code></div>
+    При <code>@Controller</code> возвращаемый объект воспринимается как <strong>имя view</strong> (HTML-шаблона). Spring пытается найти файл <code>HelloResponse.html</code>, не находит → ошибка 500 или пустой ответ. <strong>Решение:</strong> для REST всегда <code>@RestController</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">2. Дублирование пути в <code>@RequestMapping</code> и <code>@GetMapping</code></div>
+    <pre><code>@RequestMapping("/api/v1/events")
+public class EventController {
+    @GetMapping("/api/v1/events")   // ❌ получится /api/v1/events/api/v1/events
+    public List&lt;EventResponse&gt; all() { ... }
+}</code></pre>
+    <strong>Решение:</strong> метод дописывает путь <strong>относительно</strong> класса. Пиши <code>@GetMapping</code> (пустой) или <code>@GetMapping("/{id}")</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">3. Смешивание <code>@PathVariable</code> и <code>@RequestParam</code></div>
+    <pre><code>@GetMapping("/{id}")
+public EventResponse get(@RequestParam Long id) { ... }   // ❌ не сработает</code></pre>
+    Значение <code>5</code> в <code>/events/5</code> — это часть <strong>пути</strong>, а не query. <strong>Решение:</strong> <code>@PathVariable Long id</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">4. Имя <code>@PathVariable</code> не совпадает с URL</div>
+    <pre><code>@GetMapping("/{eventId}")
+public EventResponse get(@PathVariable Long id) { ... }   // ❌ при null — 500</code></pre>
+    Spring ищет плейсхолдер по имени переменной. <strong>Решение:</strong> либо одинаковые имена (<code>eventId</code>/<code>eventId</code>), либо явно: <code>@PathVariable("eventId") Long id</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">5. Возврат <code>null</code> из контроллера</div>
+    <pre><code>@GetMapping("/hello")
+public HelloResponse hello() {
+    return null;   // ❌ → 200 OK с пустым телом
+}</code></pre>
+    Spring вернёт <code>200 OK</code> с пустым телом. Клиент получит <code>Content-Length: 0</code> и не сможет распарсить JSON. <strong>Решение:</strong> возвращай <code>ResponseEntity</code> или всегда непустой объект.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">6. Не задан <code>defaultValue</code> для опционального <code>@RequestParam</code></div>
+    <pre><code>@GetMapping("/hello")
+public HelloResponse hello(@RequestParam String name) { ... }   // ❌ 400 без ?name=</code></pre>
+    Без <code>?name=</code> Spring вернёт 400 «Required request parameter 'name' is not present». <strong>Решение:</strong> <code>@RequestParam(defaultValue = "world")</code> или <code>@RequestParam(required = false)</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">7. Возврат Entity напрямую (привычка из туториалов)</div>
+    Хотя Entity может выглядеть как DTO, в реальном проекте это <strong>опасно</strong>: утекут служебные поля, Lazy-поля JPA уронят сериализацию, клиент привяжется к структуре БД. <strong>Решение:</strong> всегда возвращай DTO и маппируй явно.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">8. Ожидание, что Jackson сериализует <code>LocalDateTime</code> «как строку»</div>
+    Без модуля <code>jackson-datatype-jsr310</code> (он уже включён в Spring Boot) <code>LocalDateTime</code> сериализуется в массив <code>[2026,10,9,12,26,2]</code>. В Spring Boot — по умолчанию строка ISO-8601, но если добавляешь свой <code>ObjectMapper</code> — легко сломать.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">9. Опечатка в HTTP-методе: <code>@GetMapper</code> вместо <code>@GetMapping</code></div>
+    Компилятор не поймает — просто класс не будет обработан как контроллер. <strong>Решение:</strong> IDE обычно подсвечивает. Научись читать стектрейсы: «no mapping for GET /api/v1/hello».
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">10. Ответ 404 при запущенном приложении</div>
+    Причины: 1) не тот <code>server.port</code>, 2) опечатка в пути, 3) метод не <code>public</code>, 4) контроллер в пакете <strong>вне</strong> основного (Spring сканирует от <code>@SpringBootApplication</code> вниз по пакетам). <strong>Решение:</strong> проверь <code>@SpringBootApplication</code> и структуру пакетов.
+</div>
+
+<h2 id="interview">❓ Вопросы на собеседование</h2>
+
+<p class="question">1. Чем отличается <code>@Controller</code> от <code>@RestController</code>?</p>
+<div class="answer">
+    <code>@RestController</code> = <code>@Controller</code> + <code>@ResponseBody</code>. Оба помечают класс как Spring MVC контроллер. Но <code>@Controller</code> возвращает <strong>имя view</strong> (HTML-шаблон для рендеринга), а <code>@RestController</code> — <strong>тело ответа</strong> (объект → JSON). Для REST API всегда <code>@RestController</code>.
+</div>
+
+<p class="question">2. В чём разница между <code>@RequestParam</code> и <code>@PathVariable</code>?</p>
+<div class="answer">
+    <code>@PathVariable</code> извлекает значение из <strong>URL-пути</strong> (<code>/events/5</code> → <code>id=5</code>), применяется для <strong>идентификаторов ресурса</strong>. <code>@RequestParam</code> — из <strong>query-строки</strong> (<code>/events?status=ACTIVE</code>), применяется для <strong>фильтров, опций, пагинации</strong>. Оба могут быть опциональными через <code>required=false</code> или <code>defaultValue</code>.
+</div>
+
+<p class="question">3. Что такое DTO и почему не возвращать сразу Entity?</p>
+<div class="answer">
+    DTO (Data Transfer Object) — класс для передачи данных между слоями. Нельзя возвращать Entity напрямую, потому что: 1) утекут служебные поля (пароль, роли), 2) Lazy-поля JPA могут уронить сериализацию, 3) клиент привяжется к структуре БД, 4) нельзя навесить валидацию на вход. DTO — <strong>контракт API</strong>, Entity — <strong>внутренняя модель</strong>.
+</div>
+
+<p class="question">4. Что произойдёт, если клиент передаст <code>?count=abc</code> вместо числа?</p>
+<div class="answer">
+    Spring попытается преобразовать <code>"abc"</code> в <code>Integer</code>, не сможет, бросит <code>MethodArgumentTypeMismatchException</code>, вернёт <strong>HTTP 400 Bad Request</strong>. Без кастомного <code>@ExceptionHandler</code> покажет стандартный ответ Spring (в браузере — HTML Whitelabel Error Page, в API-клиенте — JSON).
+</div>
+
+<p class="question">5. Зачем <code>record</code> для DTO?</p>
+<div class="answer">
+    <code>record</code> (Java 14+, финально — Java 16) — <strong>неизменяемый</strong> класс с автогенерацией конструктора, геттеров, <code>equals</code>, <code>hashCode</code>, <code>toString</code>. Для DTO это идеально: 1) коротко (1 строка вместо 30), 2) невозможно случайно изменить, 3) корректно работает в коллекциях, 4) явно выражает намерение «это просто данные».
+</div>
+
+<p class="question">6. Как Spring определяет, какой метод контроллера вызвать?</p>
+<div class="answer">
+    <code>DispatcherServlet</code> смотрит на <code>@RequestMapping</code> класса и HTTP-метод/путь метода. Ищет <strong>самое специфичное</strong> совпадение. Специфичность: точный путь (<code>/count</code>) &gt; путь с плейсхолдером (<code>/{id}</code>). Если несколько методов подходят — Spring кинет <code>IllegalStateException</code> при старте (ambiguous mapping).
+</div>
+
+<p class="question">7. Что такое Jackson и как он связан со Spring Boot?</p>
+<div class="answer">
+    Jackson — библиотека для JSON-сериализации/десериализации. Spring Boot <strong>включает её автоматически</strong> через <code>spring-boot-starter-web</code>. При <code>@RestController</code> Spring использует Jackson, чтобы: 1) превратить возвращаемый Java-объект в JSON, 2) при <code>@RequestBody</code> — JSON в Java-объект. Можно настраивать через <code>application.yml</code> или свой <code>ObjectMapper</code>.
+</div>
+
+<p class="question">8. Как вернуть разные HTTP-статусы из контроллера?</p>
+<div class="answer">
+    Три способа: 1) вернуть <code>ResponseEntity&lt;T&gt;</code> — самый гибкий (<code>ResponseEntity.status(201).body(obj)</code>), 2) аннотация <code>@ResponseStatus(HttpStatus.CREATED)</code> на методе — для фиксированного статуса, 3) бросить исключение и обработать в <code>@ExceptionHandler</code> — для ошибочных сценариев. Для REST предпочтительнее <code>ResponseEntity</code> — явно видно, что вернётся.
+</div>
+
+<h2 id="checklist">📌 Чеклист самопроверки</h2>
+
+<ul class="checklist">
+    <li>Понимаю, как DispatcherServlet маршрутизирует запросы</li>
+    <li>Умею писать <code>@RestController</code> с <code>@GetMapping</code>, <code>@PostMapping</code>, <code>@PutMapping</code>, <code>@DeleteMapping</code></li>
+    <li>Знаю разницу <code>@PathVariable</code> / <code>@RequestParam</code> / <code>@RequestBody</code></li>
+    <li>Умею возвращать JSON через <code>record</code>-DTO</li>
+    <li>Понимаю, почему нужен DTO вместо Entity</li>
+    <li>Знаю, какой HTTP-код вернёт Spring при ошибке типа</li>
+    <li>Различаю <code>@Controller</code> и <code>@RestController</code></li>
+    <li>Могу объяснить, что такое Jackson и зачем он нужен</li>
+    <li>Знаю, как вернуть кастомный HTTP-статус</li>
+    <li>Проверил, что контроллер в правильном пакете (для сканирования Spring)</li>
+</ul>
+
+</body>
+</html>

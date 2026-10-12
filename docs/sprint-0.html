@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Спринт 0 — Настройка окружения</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            max-width: 900px;
+            margin: 40px auto;
+            padding: 20px;
+            line-height: 1.6;
+            color: #24292e;
+        }
+        h1 { color: #0366d6; border-bottom: 2px solid #0366d6; padding-bottom: 8px; margin-top: 40px; }
+        h2 { color: #24292e; border-bottom: 1px solid #e1e4e8; padding-bottom: 6px; margin-top: 32px; }
+        h3 { color: #24292e; margin-top: 24px; }
+        code {
+            background: #f6f8fa;
+            padding: 2px 6px;
+            border-radius: 4px;
+            font-family: "SF Mono", Monaco, Consolas, monospace;
+            font-size: 0.9em;
+            color: #d73a49;
+        }
+        pre {
+            background: #f6f8fa;
+            padding: 16px;
+            border-radius: 6px;
+            overflow-x: auto;
+            border-left: 4px solid #0366d6;
+            font-size: 0.9em;
+            line-height: 1.45;
+        }
+        pre code { background: none; padding: 0; color: #24292e; }
+        table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+        th, td { border: 1px solid #d1d5da; padding: 8px 12px; text-align: left; }
+        th { background: #f6f8fa; font-weight: 600; }
+        blockquote {
+            border-left: 4px solid #0366d6;
+            padding-left: 16px;
+            color: #6a737d;
+            margin: 16px 0;
+            font-style: italic;
+        }
+        .checklist { list-style: none; padding-left: 0; }
+        .checklist li::before { content: "☐ "; color: #0366d6; font-weight: bold; }
+        .warning { background: #fff5b1; border-left: 4px solid #f9c513; padding: 12px 16px; margin: 16px 0; }
+        .answer { background: #f0fff4; border-left: 4px solid #28a745; padding: 12px 16px; margin: 8px 0; }
+        .question { font-weight: 600; color: #0366d6; margin-top: 20px; }
+        .toc { background: #f6f8fa; padding: 16px 24px; border-radius: 6px; }
+        .toc a { color: #0366d6; text-decoration: none; }
+        .toc a:hover { text-decoration: underline; }
+        .meta { color: #6a737d; font-size: 0.9em; font-style: italic; margin-bottom: 24px; }
+        @media print {
+            body { margin: 0; max-width: 100%; }
+            h1 { page-break-before: always; }
+            h1:first-of-type { page-break-before: avoid; }
+            pre { page-break-inside: avoid; }
+            table { page-break-inside: avoid; }
+        }
+    </style>
+</head>
+<body>
+
+<h1>Спринт 0: Настройка окружения</h1>
+
+<p class="meta">Проект: <strong>Ticket Booking Service</strong> · Стек: Java 21 LTS, Spring Boot 3.5.x, Maven, Git, Docker</p>
+
+<div class="toc">
+    <strong>Содержание</strong>
+    <ol>
+        <li><a href="#goals">Цели спринта</a></li>
+        <li><a href="#theory">Теория</a></li>
+        <li><a href="#steps">Пошаговая инструкция</a></li>
+        <li><a href="#pitfalls">Подводные камни</a></li>
+        <li><a href="#interview">Вопросы на собеседование</a></li>
+        <li><a href="#checklist">Чеклист самопроверки</a></li>
+    </ol>
+</div>
+
+<h2 id="goals">🎯 Цели спринта</h2>
+<ul>
+    <li>Установить и настроить рабочее окружение backend-разработчика</li>
+    <li>Создать пустой Spring Boot проект, который запускается</li>
+    <li>Настроить Git-репозиторий</li>
+    <li>Понять, зачем нужен каждый инструмент</li>
+</ul>
+
+<h2 id="theory">📚 Теория</h2>
+
+<h3>Что нужно backend-разработчику</h3>
+
+<table>
+    <tr><th>Инструмент</th><th>Зачем нужен</th></tr>
+    <tr><td><strong>JDK</strong></td><td>Компиляция и запуск Java-кода</td></tr>
+    <tr><td><strong>IDE</strong> (IntelliJ IDEA)</td><td>Среда разработки, автодополнение, рефакторинг</td></tr>
+    <tr><td><strong>Maven</strong></td><td>Сборка проекта, управление зависимостями</td></tr>
+    <tr><td><strong>Git</strong></td><td>Контроль версий кода</td></tr>
+    <tr><td><strong>Docker</strong></td><td>Запуск инфраструктуры (PostgreSQL, Kafka, Redis) в контейнерах</td></tr>
+    <tr><td><strong>Postman</strong></td><td>Тестирование REST API вручную</td></tr>
+</table>
+
+<h3>Java LTS vs не-LTS</h3>
+
+<p><strong>LTS (Long-Term Support)</strong> — версии с долгосрочной поддержкой:</p>
+<ul>
+    <li><strong>LTS:</strong> Java 8, 11, 17, <strong>21</strong>, 25 — поддерживаются годами</li>
+    <li><strong>Не-LTS:</strong> 9, 10, 12–16, 18–20, 22, 23, 24, 26 — поддержка ~6 месяцев</li>
+</ul>
+
+<blockquote>Правило: для продакшена и обучения — только LTS. Работодатели ищут знание LTS-версий, библиотеки тестируются именно под них.</blockquote>
+
+<h3>Maven Wrapper</h3>
+
+<ul>
+    <li><strong>Maven</strong> — система сборки, ставится глобально</li>
+    <li><strong>Maven Wrapper</strong> (<code>mvnw</code>, <code>mvnw.cmd</code>) — локальная копия Maven <strong>внутри проекта</strong></li>
+    <li>Spring Initializr создаёт проект <strong>с wrapper'ом</strong> — глобальный Maven не нужен</li>
+    <li>Команды: <code>./mvnw clean install</code> (Linux/Mac), <code>mvnw.cmd clean install</code> (Windows)</li>
+</ul>
+
+<h2 id="steps">💻 Пошаговая инструкция</h2>
+
+<h3>Шаг 1. Проверить окружение</h3>
+
+<pre><code>java --version    # должно быть 21+ (LTS)
+git --version
+docker --version
+docker compose version</code></pre>
+
+<h3>Шаг 2. Скачать JDK 21 через IntelliJ IDEA</h3>
+
+<ol>
+    <li><strong>File → Project Structure</strong></li>
+    <li><strong>Project</strong> → <strong>SDK → Add SDK → Download JDK…</strong></li>
+    <li><strong>Version:</strong> 21, <strong>Vendor:</strong> Eclipse Temurin (или Amazon Corretto)</li>
+    <li><strong>Download</strong> — IDEA сама скачает</li>
+</ol>
+
+<h3>Шаг 3. Создать Spring Boot проект</h3>
+
+<ol>
+    <li><strong>File → New → Project → Spring Boot</strong></li>
+    <li>Параметры:
+        <ul>
+            <li><strong>Name:</strong> <code>ticket-booking-service</code></li>
+            <li><strong>Type:</strong> Maven</li>
+            <li><strong>JDK:</strong> 21</li>
+            <li><strong>Java:</strong> 21</li>
+            <li><strong>Packaging:</strong> Jar</li>
+            <li><strong>Group:</strong> <code>com.loskutnikov</code></li>
+            <li><strong>Package:</strong> <code>com.loskutnikov.booking</code></li>
+        </ul>
+    </li>
+    <li><strong>Spring Boot:</strong> 3.5.x (стабильная)</li>
+    <li><strong>Dependencies:</strong>
+        <ul>
+            <li>✅ Spring Web</li>
+            <li>✅ Spring Boot DevTools</li>
+        </ul>
+    </li>
+    <li><strong>Create</strong></li>
+</ol>
+
+<h3>Шаг 4. Структура проекта</h3>
+
+<pre><code>ticket-booking-service/
+├── src/
+│   ├── main/
+│   │   ├── java/com/loskutnikov/booking/
+│   │   │   └── TicketBookingServiceApplication.java
+│   │   └── resources/
+│   │       └── application.properties
+│   └── test/
+├── pom.xml
+├── mvnw
+├── mvnw.cmd
+└── .gitignore</code></pre>
+
+<h3>Шаг 5. Запустить</h3>
+
+<p>Зелёный ▶️ рядом с <code>main</code> или <code>Ctrl+Shift+F10</code>. В логах должно быть:</p>
+
+<pre><code>Started TicketBookingServiceApplication in X.XXX seconds</code></pre>
+
+<h3>Шаг 6. Настроить Git</h3>
+
+<ul>
+    <li><strong>VCS → Enable Version Control Integration → Git</strong></li>
+    <li><strong>VCS → Git → Commit</strong> (<code>Ctrl+K</code>)</li>
+    <li><strong>VCS → Git → Push</strong> (<code>Ctrl+Shift+K</code>)</li>
+</ul>
+
+<p><strong>Правила Git:</strong></p>
+<ul>
+    <li>Осмысленные сообщения коммитов (<code>Add pagination, transactions, dirty checking</code>)</li>
+    <li><code>.gitignore</code> <strong>обязательно</strong> (<code>target/</code>, <code>.idea/</code>, <code>*.iml</code>)</li>
+    <li>Для solo-проекта работаем в <code>main</code></li>
+</ul>
+
+<h2 id="pitfalls">⚠️ Подводные камни</h2>
+
+<table>
+    <tr><th>Проблема</th><th>Решение</th></tr>
+    <tr><td>Java 26, а нужна 21</td><td>Скачать JDK 21 через IDEA, использовать в проекте</td></tr>
+    <tr><td>IDEA не видит Maven</td><td>Использовать bundled Maven (Settings → Maven → Bundled)</td></tr>
+    <tr><td><code>ArtifactHandlerManager</code> ошибка</td><td>Поставить SDK 21 для импортера Maven</td></tr>
+    <tr><td>Git SSL ошибка на Windows</td><td><code>git config --global http.sslBackend schannel</code></td></tr>
+    <tr><td>IDEA подставляет <code>spring-boot-starter-webmvc</code></td><td><strong>Исправить на <code>spring-boot-starter-web</code></strong> — это баг генератора IDEA</td></tr>
+</table>
+
+<h2 id="interview">❓ Вопросы на собеседование</h2>
+
+<p class="question">1. В чём разница между JDK, JRE и JVM?</p>
+<div class="answer">
+    <strong>JDK</strong> (Java Development Kit) = JRE + инструменты разработчика (<code>javac</code>, <code>jar</code>, <code>jdb</code> и др.). <strong>JRE</strong> (Java Runtime Environment) = JVM + библиотеки классов. <strong>JVM</strong> (Java Virtual Machine) — виртуальная машина, исполняющая байт-код. Для разработки нужен JDK, для запуска — достаточно JRE.
+</div>
+
+<p class="question">2. Что такое LTS-версия Java?</p>
+<div class="answer">
+    LTS (Long-Term Support) — версия с <strong>долгосрочной поддержкой</strong> (несколько лет). Не-LTS поддерживается ~6 месяцев. В продакшене используют LTS: Java 8, 11, 17, 21, 25. LTS-версии стабильнее, лучше документированы, библиотеки тестируются именно под них.
+</div>
+
+<p class="question">3. Зачем нужен Maven Wrapper?</p>
+<div class="answer">
+    Maven Wrapper (<code>mvnw</code>) — это локальная копия Maven <strong>внутри проекта</strong>. Позволяет: 1) не устанавливать Maven глобально, 2) зафиксировать <strong>версию Maven</strong> (у всех разработчиков одинаковая), 3) работать в CI/CD без установки Maven. Все современные Spring Boot проекты используют wrapper.
+</div>
+
+<p class="question">4. Что такое <code>.gitignore</code> и зачем он?</p>
+<div class="answer">
+    Файл, описывающий, какие файлы и папки <strong>не должны попадать в Git</strong>. Для Java-проектов это обычно: <code>target/</code> (артефакты сборки), <code>.idea/</code> и <code>*.iml</code> (настройки IDE), <code>.DS_Store</code> (Mac), <code>*.log</code>. Без него в репозиторий попадут локальные настройки, и у других разработчиков проект может сломаться.
+</div>
+
+<p class="question">5. Чем отличается <code>mvn clean install</code> от <code>mvn clean package</code>?</p>
+<div class="answer">
+    <code>package</code> — собирает JAR/WAR в <code>target/</code>, но не устанавливает его в локальный репозиторий <code>~/.m2</code>. <code>install</code> — делает то же + <strong>копирует артефакт в локальный репозиторий</strong>, чтобы другие проекты могли его использовать как зависимость. Для обычной сборки приложения достаточно <code>package</code>.
+</div>
+
+<h2 id="checklist">📌 Чеклист самопроверки</h2>
+
+<ul class="checklist">
+    <li>Установлен JDK 21 (LTS)</li>
+    <li>IntelliJ IDEA настроена, Maven bundled</li>
+    <li>Создан Spring Boot проект</li>
+    <li>Приложение запускается без ошибок</li>
+    <li>Git-репозиторий создан на GitHub</li>
+    <li><code>.gitignore</code> настроен</li>
+    <li>Понимаю, зачем Maven Wrapper</li>
+    <li>Различаю JDK / JRE / JVM</li>
+    <li>Знаю, почему для прода — только LTS Java</li>
+</ul>
+
+</body>
+</html>

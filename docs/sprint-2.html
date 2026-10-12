@@ -1,0 +1,494 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Спринт 2 — CRUD + Валидация + Обработка ошибок</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #24292e; }
+        h1 { color: #0366d6; border-bottom: 2px solid #0366d6; padding-bottom: 8px; margin-top: 40px; }
+        h2 { color: #24292e; border-bottom: 1px solid #e1e4e8; padding-bottom: 6px; margin-top: 32px; }
+        h3 { color: #24292e; margin-top: 24px; }
+        code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 0.9em; color: #d73a49; }
+        pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; border-left: 4px solid #0366d6; font-size: 0.9em; line-height: 1.45; }
+        pre code { background: none; padding: 0; color: #24292e; }
+        table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+        th, td { border: 1px solid #d1d5da; padding: 8px 12px; text-align: left; }
+        th { background: #f6f8fa; font-weight: 600; }
+        blockquote { border-left: 4px solid #0366d6; padding-left: 16px; color: #6a737d; margin: 16px 0; font-style: italic; }
+        .checklist { list-style: none; padding-left: 0; }
+        .checklist li::before { content: "☐ "; color: #0366d6; font-weight: bold; }
+        .answer { background: #f0fff4; border-left: 4px solid #28a745; padding: 12px 16px; margin: 8px 0; }
+        .question { font-weight: 600; color: #0366d6; margin-top: 20px; }
+        .toc { background: #f6f8fa; padding: 16px 24px; border-radius: 6px; }
+        .toc a { color: #0366d6; text-decoration: none; }
+        .meta { color: #6a737d; font-size: 0.9em; font-style: italic; margin-bottom: 24px; }
+        .mistake { background: #ffeef0; border-left: 4px solid #d73a49; padding: 12px 16px; margin: 12px 0; }
+        .mistake-title { font-weight: 600; color: #d73a49; margin-bottom: 6px; }
+        .layer-diagram { background: #f6f8fa; padding: 20px; border-radius: 6px; font-family: monospace; line-height: 1.8; margin: 16px 0; }
+        @media print { body { margin: 0; max-width: 100%; } h1 { page-break-before: always; } h1:first-of-type { page-break-before: avoid; } pre { page-break-inside: avoid; } table { page-break-inside: avoid; } .mistake { page-break-inside: avoid; } }
+    </style>
+</head>
+<body>
+
+<h1>Спринт 2: CRUD + Валидация + Обработка ошибок</h1>
+
+<p class="meta">Проект: <strong>Ticket Booking Service</strong> · Стек: Spring MVC, Bean Validation, @RestControllerAdvice</p>
+
+<div class="toc">
+    <strong>Содержание</strong>
+    <ol>
+        <li><a href="#goals">Цели спринта</a></li>
+        <li><a href="#theory">Теория</a></li>
+        <li><a href="#steps">Пошаговая инструкция</a></li>
+        <li><a href="#pitfalls">Подводные камни</a></li>
+        <li><a href="#mistakes">Частые ошибки на практике</a></li>
+        <li><a href="#interview">Вопросы на собеседование</a></li>
+        <li><a href="#checklist">Чеклист самопроверки</a></li>
+    </ol>
+</div>
+
+<h2 id="goals">🎯 Цели спринта</h2>
+<ul>
+    <li>Освоить слоистую архитектуру (Controller → Service → Repository)</li>
+    <li>Реализовать полный CRUD для событий</li>
+    <li>Освоить Bean Validation (<code>@Valid</code>, <code>@NotBlank</code>, <code>@Future</code>)</li>
+    <li>Создать свои исключения (<code>BookingException</code> → <code>EventNotFoundException</code>)</li>
+    <li>Централизовать обработку ошибок через <code>@RestControllerAdvice</code></li>
+    <li>Освоить правильные HTTP-статусы для CRUD</li>
+</ul>
+
+<h2 id="theory">📚 Теория</h2>
+
+<h3>Слоистая архитектура</h3>
+
+<div class="layer-diagram">
+    ┌──────────────────────────────────────┐
+    │  Controller  (@RestController)       │  ← HTTP, DTO
+    └──────────────────┬───────────────────┘
+    │
+    ┌──────────────────▼───────────────────┐
+    │  Service  (@Service)                 │  ← бизнес-логика
+    └──────────────────┬───────────────────┘
+    │
+    ┌──────────────────▼───────────────────┐
+    │  Repository  (@Repository)           │  ← работа с данными
+    └──────────────────────────────────────┘
+</div>
+
+<p><strong>Правило:</strong> каждый слой знает только о «соседе снизу».</p>
+
+<table>
+    <tr><th>Слой</th><th>Отвечает за</th><th>Не знает про</th></tr>
+    <tr><td>Controller</td><td>HTTP, JSON, DTO</td><td>Бизнес-логику, БД</td></tr>
+    <tr><td>Service</td><td>Бизнес-логику, транзакции</td><td>HTTP, SQL</td></tr>
+    <tr><td>Repository</td><td>Доступ к данным</td><td>HTTP, бизнес-логику</td></tr>
+</table>
+
+<h3>DTO: Request vs Response</h3>
+
+<pre><code>// Входящие данные (клиент → сервер)
+public record CreateEventRequest(
+    @NotBlank String name,
+    @NotNull @Future LocalDateTime date,
+    @NotBlank String venue
+) {}
+
+// Исходящие данные (сервер → клиент)
+public record EventResponse(
+    Long id,
+    String name,
+    LocalDateTime date,
+    String venue,
+    Status status
+) {}</code></pre>
+
+<p><strong>Почему разделять:</strong></p>
+<ul>
+    <li>В <code>CreateEventRequest</code> <strong>нет id</strong> — его генерит сервер</li>
+    <li>В <code>EventResponse</code> <strong>нет валидации</strong> — она нужна только на входе</li>
+    <li>Клиент не может подсунуть свой <code>id</code> при создании</li>
+</ul>
+
+<h3>Bean Validation</h3>
+
+<table>
+    <tr><th>Аннотация</th><th>Что проверяет</th></tr>
+    <tr><td><code>@NotNull</code></td><td>Не <code>null</code></td></tr>
+    <tr><td><code>@NotBlank</code></td><td>Не <code>null</code>, не пустая, не пробелы (для String)</td></tr>
+    <tr><td><code>@NotEmpty</code></td><td>Не <code>null</code>, не пустая коллекция/строка</td></tr>
+    <tr><td><code>@Size(min, max)</code></td><td>Длина строки/коллекции</td></tr>
+    <tr><td><code>@Min / @Max</code></td><td>Границы чисел</td></tr>
+    <tr><td><code>@Positive</code></td><td>Число &gt; 0</td></tr>
+    <tr><td><code>@Future</code></td><td>Дата в будущем</td></tr>
+    <tr><td><code>@Email</code></td><td>Формат email</td></tr>
+</table>
+
+<h3>HTTP-статусы для CRUD</h3>
+
+<table>
+    <tr><th>Операция</th><th>Метод</th><th>Успех</th><th>Ошибки</th></tr>
+    <tr><td>Создать</td><td>POST</td><td><strong>201 Created</strong> + Location</td><td>400</td></tr>
+    <tr><td>Список</td><td>GET</td><td><strong>200 OK</strong></td><td>—</td></tr>
+    <tr><td>Один</td><td>GET</td><td><strong>200 OK</strong></td><td>404</td></tr>
+    <tr><td>Обновить</td><td>PUT</td><td><strong>200 OK</strong></td><td>400, 404</td></tr>
+    <tr><td>Удалить</td><td>DELETE</td><td><strong>204 No Content</strong></td><td>404</td></tr>
+</table>
+
+<h3><code>@RestControllerAdvice</code></h3>
+
+<p>Перехватывает исключения из <strong>любых</strong> контроллеров и превращает в HTTP-ответы. Убирает <code>try/catch</code> из контроллеров.</p>
+
+<pre><code>@RestControllerAdvice
+public class GlobalExceptionHandler {
+    @ExceptionHandler(EventNotFoundException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleNotFound(...) { ... }
+}</code></pre>
+
+<h2 id="steps">💻 Пошаговая инструкция</h2>
+
+<h3>Шаг 1. Модель и <code>Status</code></h3>
+
+<pre><code>package com.loskutnikov.booking.model;
+
+import java.time.LocalDateTime;
+
+public class Event {
+    private Long id;
+    private String name;
+    private LocalDateTime date;
+    private String venue;
+    private Status status;
+
+    public Event(Long id, String name, LocalDateTime date, String venue, Status status) {
+        this.id = id;
+        this.name = name;
+        this.date = date;
+        this.venue = venue;
+        this.status = status;
+    }
+    // геттеры/сеттеры через Alt+Insert
+}</code></pre>
+
+<h3>Шаг 2. DTO</h3>
+
+<p><code>EventResponse</code> с методом маппинга:</p>
+
+<pre><code>public record EventResponse(
+        Long id, String name, LocalDateTime date,
+        String venue, Status status
+) {
+    public static EventResponse from(Event event) {
+        return new EventResponse(
+                event.getId(), event.getName(),
+                event.getDate(), event.getVenue(), event.getStatus());
+    }
+}</code></pre>
+
+<p><code>CreateEventRequest</code>:</p>
+
+<pre><code>public record CreateEventRequest(
+        @NotBlank(message = "Name must not be blank") String name,
+        @NotNull @Future(message = "Date must be in the future") LocalDateTime date,
+        @NotBlank(message = "Venue must not be blank") String venue
+) {}</code></pre>
+
+<p><code>UpdateEventRequest</code> — как Create + <code>Status</code>.</p>
+
+<h3>Шаг 3. Repository (in-memory)</h3>
+
+<pre><code>@Repository
+public class EventRepository {
+    private final Map&lt;Long, Event&gt; storage = new ConcurrentHashMap&lt;&gt;();
+    private final AtomicLong idGenerator = new AtomicLong(0);
+
+    public Event save(Event event) {
+        if (event.getId() == null) event.setId(idGenerator.incrementAndGet());
+        storage.put(event.getId(), event);
+        return event;
+    }
+    public Optional&lt;Event&gt; findById(Long id) { return Optional.ofNullable(storage.get(id)); }
+    public List&lt;Event&gt; findAll() { return new ArrayList&lt;&gt;(storage.values()); }
+    public void deleteById(Long id) { storage.remove(id); }
+    public boolean existsById(Long id) { return storage.containsKey(id); }
+}</code></pre>
+
+<h3>Шаг 4. Service</h3>
+
+<pre><code>@Service
+public class EventService {
+    private final EventRepository eventRepository;
+
+    public EventService(EventRepository eventRepository) {
+        this.eventRepository = eventRepository;
+    }
+
+    public EventResponse create(CreateEventRequest req) {
+        Event event = new Event(null, req.name(), req.date(), req.venue(), Status.AVAILABLE);
+        return EventResponse.from(eventRepository.save(event));
+    }
+
+    public EventResponse findById(Long id) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new EventNotFoundException(id));
+        return EventResponse.from(event);
+    }
+
+    public List&lt;EventResponse&gt; findAll() {
+        return eventRepository.findAll().stream().map(EventResponse::from).toList();
+    }
+
+    public EventResponse update(Long id, UpdateEventRequest req) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -> new EventNotFoundException(id));
+        event.setName(req.name());
+        event.setDate(req.date());
+        event.setVenue(req.venue());
+        event.setStatus(req.status());
+        return EventResponse.from(eventRepository.save(event));
+    }
+
+    public void delete(Long id) {
+        if (!eventRepository.existsById(id)) throw new EventNotFoundException(id);
+        eventRepository.deleteById(id);
+    }
+}</code></pre>
+
+<h3>Шаг 5. Controller</h3>
+
+<pre><code>@RestController
+@RequestMapping("/api/v1/events")
+public class EventController {
+    private final EventService eventService;
+
+    public EventController(EventService eventService) { this.eventService = eventService; }
+
+    @PostMapping
+    public ResponseEntity&lt;EventResponse&gt; create(@Valid @RequestBody CreateEventRequest req) {
+        EventResponse created = eventService.create(req);
+        URI location = URI.create("/api/v1/events/" + created.id());
+        return ResponseEntity.created(location).body(created);
+    }
+
+    @GetMapping
+    public List&lt;EventResponse&gt; findAll() { return eventService.findAll(); }
+
+    @GetMapping("/{id}")
+    public EventResponse findById(@PathVariable Long id) { return eventService.findById(id); }
+
+    @PutMapping("/{id}")
+    public EventResponse update(@PathVariable Long id,
+                                @Valid @RequestBody UpdateEventRequest req) {
+        return eventService.update(id, req);
+    }
+
+    @DeleteMapping("/{id}")
+    @ResponseStatus(HttpStatus.NO_CONTENT)
+    public void delete(@PathVariable Long id) { eventService.delete(id); }
+}</code></pre>
+
+<h3>Шаг 6. Исключения</h3>
+
+<pre><code>public class BookingException extends RuntimeException {
+    public BookingException(String message) { super(message); }
+    public BookingException(String message, Throwable cause) { super(message, cause); }
+}
+
+public class EventNotFoundException extends BookingException {
+    public EventNotFoundException(Long id) {
+        super("Event with id " + id + " not found");
+    }
+}
+
+public record ErrorResponse(
+        Instant timestamp, int status,
+        String error, String message, String path
+) {}</code></pre>
+
+<h3>Шаг 7. GlobalExceptionHandler</h3>
+
+<pre><code>@RestControllerAdvice
+public class GlobalExceptionHandler {
+
+    @ExceptionHandler(EventNotFoundException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleNotFound(
+            EventNotFoundException ex, HttpServletRequest req) {
+        return buildResponse(HttpStatus.NOT_FOUND, ex.getMessage(), req);
+    }
+
+    @ExceptionHandler(MethodArgumentNotValidException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleValidation(
+            MethodArgumentNotValidException ex, HttpServletRequest req) {
+        String message = ex.getBindingResult().getFieldErrors().stream()
+                .map(e -&gt; e.getField() + ": " + e.getDefaultMessage())
+                .collect(Collectors.joining("; "));
+        return buildResponse(HttpStatus.BAD_REQUEST, message, req);
+    }
+
+    @ExceptionHandler(MethodArgumentTypeMismatchException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleTypeMismatch(
+            MethodArgumentTypeMismatchException ex, HttpServletRequest req) {
+        String message = "Parameter '" + ex.getName() + "' has invalid value: '" + ex.getValue() + "'";
+        return buildResponse(HttpStatus.BAD_REQUEST, message, req);
+    }
+
+    @ExceptionHandler(BookingException.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleBusiness(
+            BookingException ex, HttpServletRequest req) {
+        return buildResponse(HttpStatus.BAD_REQUEST, ex.getMessage(), req);
+    }
+
+    @ExceptionHandler(Exception.class)
+    public ResponseEntity&lt;ErrorResponse&gt; handleAll(
+            Exception ex, HttpServletRequest req) {
+        return buildResponse(HttpStatus.INTERNAL_SERVER_ERROR,
+                "Unexpected error: " + ex.getMessage(), req);
+    }
+
+    private ResponseEntity&lt;ErrorResponse&gt; buildResponse(
+            HttpStatus status, String message, HttpServletRequest req) {
+        ErrorResponse error = new ErrorResponse(
+                Instant.now(), status.value(),
+                status.getReasonPhrase(), message, req.getRequestURI());
+        return ResponseEntity.status(status).body(error);
+    }
+}</code></pre>
+
+<h2 id="pitfalls">⚠️ Подводные камни</h2>
+
+<table>
+    <tr><th>Проблема</th><th>Что делать</th></tr>
+    <tr><td>Забыли <code>@Valid</code> на <code>@RequestBody</code></td><td>Валидация <strong>не сработает</strong>. Аннотации <code>@NotBlank</code> и др. проигнорируются</td></tr>
+    <tr><td>Валидация срабатывает в контроллере, <strong>до</strong> сервиса</td><td>Если <code>@Future</code> не проходит — сервис вообще не вызовется. Это правильно</td></tr>
+    <tr><td><code>@ExceptionHandler(Exception.class)</code></td><td>Обязательная «страховка»: иначе Whitelabel HTML попадёт клиенту</td></tr>
+    <tr><td>Порядок <code>@ExceptionHandler</code></td><td>Spring выбирает <strong>самый специфичный</strong>. <code>EventNotFoundException</code> &gt; <code>BookingException</code> &gt; <code>Exception</code></td></tr>
+    <tr><td>Ответ на <code>POST</code> — 200, а не 201</td><td>REST-стандарт — <strong>201 Created</strong> + <code>Location</code> header. Используй <code>ResponseEntity.created(...)</code></td></tr>
+    <tr><td><code>ResponseEntity</code> vs <code>@ResponseStatus</code></td><td>Первое — для гибкого ответа. Второе — для фиксированного статуса без тела</td></tr>
+</table>
+
+<h2 id="mistakes">🐞 Частые ошибки на практике</h2>
+
+<div class="mistake">
+    <div class="mistake-title">1. Валидация не сработала — забыли <code>@Valid</code></div>
+    <pre><code>@PostMapping
+public EventResponse create(@RequestBody CreateEventRequest req) { ... }   // ❌ @Valid нет
+</code></pre>
+    Аннотации <code>@NotBlank</code>, <code>@Future</code> на DTO <strong>не работают без <code>@Valid</code></strong>. Spring не запускает валидатор. <strong>Решение:</strong> <code>@Valid @RequestBody CreateEventRequest req</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">2. Ожидание 404, а получаешь 500</div>
+    <pre><code>throw new RuntimeException("Event not found");   // ❌ все RuntimeException → 500
+</code></pre>
+    <strong>Решение:</strong> создать <code>EventNotFoundException extends BookingException</code> и написать <code>@ExceptionHandler(EventNotFoundException.class)</code> → 404.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">3. Ловля только конкретных исключений — забыли fallback</div>
+    <pre><code>@ExceptionHandler(EventNotFoundException.class)   // только это — и всё
+</code></pre>
+    Любое непойманное исключение (<code>NullPointerException</code>, ошибка Jackson) → Whitelabel Error Page с огромным стектрейсом. <strong>Решение:</strong> добавить <code>@ExceptionHandler(Exception.class)</code> как страховку.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">4. Каскадная валидация не работает</div>
+    Если DTO содержит вложенный объект (<code>Address</code>, <code>List&lt;String&gt;</code>), валидация <strong>не заходит внутрь</strong> без <code>@Valid</code> на поле:
+    <pre><code>public record CreateEventRequest(
+    @Valid @NotNull Address address,   // ← без @Valid поля внутри не проверятся
+    ...
+) {}</code></pre>
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">5. <code>@NotBlank</code> на не-String поле</div>
+    <pre><code>@NotBlank LocalDateTime date;   // ❌ не скомпилируется или упадёт в runtime
+</code></pre>
+    <code>@NotBlank</code> работает <strong>только со String</strong>. Для объектов — <code>@NotNull</code>, для дат — <code>@Future</code>/<code>@Past</code>, для коллекций — <code>@NotEmpty</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">6. Имя поля в сообщении об ошибке не совпадает с DTO</div>
+    Клиент видит <code>"name: must not be blank"</code>, а в DTO поле <code>eventName</code> — сбивает с толку. <strong>Решение:</strong> используй осмысленные имена полей в DTO, совпадающие с JSON.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">7. Возврат <code>void</code> на <code>DELETE</code> без <code>@ResponseStatus</code></div>
+    <pre><code>@DeleteMapping("/{id}")
+public void delete(@PathVariable Long id) { ... }   // → 200 OK, а не 204
+</code></pre>
+    Spring по умолчанию вернёт 200. <strong>Решение:</strong> добавить <code>@ResponseStatus(HttpStatus.NO_CONTENT)</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">8. Двойная валидация — и в контроллере, и в сервисе</div>
+    Валидация должна быть в <strong>одном месте</strong>. Если DTO валидируется через <code>@Valid</code> — не дублируй проверки в сервисе. Бизнес-валидация (например, «такое событие уже есть») — в сервисе.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">9. <code>@RestControllerAdvice</code> не подхватился</div>
+    Класс должен быть в пакете, <strong>сканируемом Spring</strong> (от <code>@SpringBootApplication</code> вниз). Если положить в <code>com.other.package</code> — не сработает. <strong>Решение:</strong> держи внутри основного пакета.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">10. Отсутствие <code>Location</code> header на 201 Created</div>
+    REST-стандарт: при <code>POST</code> в ответе должен быть заголовок <code>Location</code> с URL созданного ресурса. Без него клиент не знает, где искать. <strong>Решение:</strong> <code>ResponseEntity.created(URI.create("/api/v1/events/" + id)).body(...)</code>.
+</div>
+
+<h2 id="interview">❓ Вопросы на собеседование</h2>
+
+<p class="question">1. Что такое слоистая архитектура и зачем она нужна?</p>
+<div class="answer">
+    Разделение кода на слои: <strong>Controller</strong> (HTTP) → <strong>Service</strong> (бизнес-логика) → <strong>Repository</strong> (данные). Каждый слой знает только о соседе снизу. Плюсы: 1) изоляция — сменить БД без переписывания сервиса, 2) тестируемость — можно замокать слой, 3) переиспользование — сервис дёргается из REST, Kafka, CLI. Слоистая архитектура — основа enterprise-приложений.
+</div>
+
+<p class="question">2. Чем <code>@Valid</code> отличается от ручной валидации?</p>
+<div class="answer">
+    <code>@Valid</code> — <strong>декларативная</strong> валидация через аннотации на DTO (<code>@NotBlank</code>, <code>@Future</code>). Spring сам запускает валидатор при поступлении запроса, до вызова метода. Плюсы: 1) меньше кода, 2) валидация рядом с полем, 3) стандартизированный ответ. Ручная валидация — гибче (можно проверить бизнес-правила), но многословнее. Обычно комбинация: формат — через Bean Validation, бизнес-правила — в сервисе.
+</div>
+
+<p class="question">3. Что делает <code>@RestControllerAdvice</code> и почему это лучше <code>try/catch</code>?</p>
+<div class="answer">
+    <code>@RestControllerAdvice</code> — AOP-механизм, перехватывающий исключения из <strong>всех</strong> контроллеров. Централизует обработку ошибок в одном классе. Лучше <code>try/catch</code> потому что: 1) нет дублирования в 100 методах, 2) единый формат ответа, 3) невозможно забыть обработать — <code>@ExceptionHandler(Exception.class)</code> как страховка, 4) тестируется один раз на все контроллеры.
+</div>
+
+<p class="question">4. Какие HTTP-статусы использовать для CRUD?</p>
+<div class="answer">
+    <strong>POST</strong> → <code>201 Created</code> + <code>Location</code> header. <strong>GET</strong> → <code>200 OK</code>, для несуществующего → <code>404 Not Found</code>. <strong>PUT</strong> → <code>200 OK</code> (с обновлённым объектом). <strong>DELETE</strong> → <code>204 No Content</code>. Ошибки валидации → <code>400 Bad Request</code>. Конфликты (дубликат) → <code>409 Conflict</code>. Внутренние ошибки → <code>500 Internal Server Error</code>.
+</div>
+
+<p class="question">5. Зачем иерархия исключений: <code>BookingException</code> → <code>EventNotFoundException</code>?</p>
+<div class="answer">
+    <code>BookingException</code> — базовый класс для всех бизнес-исключений. Отделяет «наши осознанные» ошибки от технических (<code>NullPointerException</code>, <code>DataAccessException</code>). Позволяет: 1) поймать всё «своё» одним <code>@ExceptionHandler(BookingException.class)</code>, 2) для каждого наследника уточнить статус (404, 409), 3) расширять — новый тип ошибки наследуется от <code>BookingException</code> и попадает в общую обработку.
+</div>
+
+<p class="question">6. Что вернётся, если в DTO стоит <code>@NotBlank</code>, но клиент прислал <code>null</code>?</p>
+<div class="answer">
+    <code>@NotBlank</code> ловит <code>null</code>, пустую строку и строку из пробелов. Spring бросит <code>MethodArgumentNotValidException</code>. Наш <code>@ExceptionHandler</code> вернёт <code>400 Bad Request</code> с сообщением <code>"name: Name must not be blank"</code>. Метод контроллера <strong>не вызовется</strong> — валидация работает на входе.
+</div>
+
+<p class="question">7. Почему DTO Request и DTO Response — разные классы?</p>
+<div class="answer">
+    Потому что <strong>вход и выход API — это разные контракты</strong>. В Request нет <code>id</code> (его генерит сервер), нет <code>status</code> (устанавливается логикой). В Response нет валидации (она нужна только на входе). Разделение защищает от: 1) клиент подсовывает свой <code>id</code>, 2) клиент меняет поля, которые не должен. Плюс — можно менять DTO независимо: добавили поле в Response — Request не тронут.
+</div>
+
+<p class="question">8. Что такое <code>ResponseEntity</code> и когда использовать вместо обычного возврата?</p>
+<div class="answer">
+    <code>ResponseEntity&lt;T&gt;</code> — обёртка над ответом, даёт полный контроль: статус, headers, body. Используй, когда: 1) нужен нестандартный статус (<code>201</code>, <code>204</code>), 2) нужен <code>Location</code> header, 3) статус зависит от логики. Обычный возврат (<code>return eventResponse;</code>) — для простых случаев, статус по умолчанию <code>200 OK</code>. <code>@ResponseStatus</code> — для фиксированного статуса без гибкости.
+</div>
+
+<h2 id="checklist">📌 Чеклист самопроверки</h2>
+
+<ul class="checklist">
+    <li>Понимаю слоистую архитектуру и зачем разделять Controller / Service / Repository</li>
+    <li>Умею писать DTO Request и Response раздельно</li>
+    <li>Использую <code>@Valid</code> с <code>@NotBlank</code>, <code>@Future</code>, <code>@NotNull</code></li>
+    <li>Создал свои исключения с иерархией</li>
+    <li>Настроил <code>@RestControllerAdvice</code> с обработчиками</li>
+    <li>Возвращаю правильные HTTP-статусы (201, 204, 404, 400)</li>
+    <li>Знаю разницу <code>ResponseEntity</code> / <code>@ResponseStatus</code> / обычного возврата</li>
+    <li>Понимаю, что валидация срабатывает до сервиса</li>
+    <li>Добавил fallback <code>@ExceptionHandler(Exception.class)</code></li>
+    <li>Тестировал все сценарии в Postman (успех + ошибки)</li>
+</ul>
+
+</body>
+</html>

@@ -1,0 +1,539 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Спринт 3 — PostgreSQL + JPA + Docker Compose</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #24292e; }
+        h1 { color: #0366d6; border-bottom: 2px solid #0366d6; padding-bottom: 8px; margin-top: 40px; }
+        h2 { color: #24292e; border-bottom: 1px solid #e1e4e8; padding-bottom: 6px; margin-top: 32px; }
+        h3 { color: #24292e; margin-top: 24px; }
+        code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 0.9em; color: #d73a49; }
+        pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; border-left: 4px solid #0366d6; font-size: 0.9em; line-height: 1.45; }
+        pre code { background: none; padding: 0; color: #24292e; }
+        table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+        th, td { border: 1px solid #d1d5da; padding: 8px 12px; text-align: left; }
+        th { background: #f6f8fa; font-weight: 600; }
+        blockquote { border-left: 4px solid #0366d6; padding-left: 16px; color: #6a737d; margin: 16px 0; font-style: italic; }
+        .checklist { list-style: none; padding-left: 0; }
+        .checklist li::before { content: "☐ "; color: #0366d6; font-weight: bold; }
+        .answer { background: #f0fff4; border-left: 4px solid #28a745; padding: 12px 16px; margin: 8px 0; }
+        .question { font-weight: 600; color: #0366d6; margin-top: 20px; }
+        .toc { background: #f6f8fa; padding: 16px 24px; border-radius: 6px; }
+        .toc a { color: #0366d6; text-decoration: none; }
+        .meta { color: #6a737d; font-size: 0.9em; font-style: italic; margin-bottom: 24px; }
+        .mistake { background: #ffeef0; border-left: 4px solid #d73a49; padding: 12px 16px; margin: 12px 0; }
+        .mistake-title { font-weight: 600; color: #d73a49; margin-bottom: 6px; }
+        .arch-diagram { background: #f6f8fa; padding: 20px; border-radius: 6px; font-family: monospace; line-height: 1.8; margin: 16px 0; white-space: pre; overflow-x: auto; }
+        @media print { body { margin: 0; max-width: 100%; } h1 { page-break-before: always; } h1:first-of-type { page-break-before: avoid; } pre { page-break-inside: avoid; } table { page-break-inside: avoid; } .mistake { page-break-inside: avoid; } }
+    </style>
+</head>
+<body>
+
+<h1>Спринт 3: PostgreSQL + JPA + Docker Compose</h1>
+
+<p class="meta">Проект: <strong>Ticket Booking Service</strong> · Стек: Spring Data JPA, Hibernate 6, PostgreSQL 16, Docker Compose</p>
+
+<div class="toc">
+    <strong>Содержание</strong>
+    <ol>
+        <li><a href="#goals">Цели спринта</a></li>
+        <li><a href="#theory">Теория</a></li>
+        <li><a href="#steps">Пошаговая инструкция</a></li>
+        <li><a href="#pitfalls">Подводные камни</a></li>
+        <li><a href="#mistakes">Частые ошибки на практике</a></li>
+        <li><a href="#interview">Вопросы на собеседование</a></li>
+        <li><a href="#checklist">Чеклист самопроверки</a></li>
+    </ol>
+</div>
+
+<h2 id="goals">🎯 Цели спринта</h2>
+<ul>
+    <li>Поднять PostgreSQL в Docker Compose</li>
+    <li>Заменить in-memory <code>Map</code> на настоящую БД</li>
+    <li>Превратить <code>Event</code> в JPA-сущность (<code>@Entity</code>)</li>
+    <li>Заменить <code>EventRepository</code> на <code>JpaRepository</code> (интерфейс без реализации)</li>
+    <li>Понять persistence context, dirty checking, <code>@Transactional</code></li>
+    <li>Освоить пагинацию через <code>Pageable</code> + <code>Page&lt;T&gt;</code></li>
+</ul>
+
+<h2 id="theory">📚 Теория</h2>
+
+<h3>JPA / Hibernate / Spring Data JPA — иерархия</h3>
+
+<div class="arch-diagram">Spring Data JPA   ← ты пишешь код здесь (JpaRepository)
+    ↓
+    JPA (интерфейсы)  ← спецификация (Jakarta Persistence)
+    ↓
+    Hibernate         ← реализация (генерит SQL)
+    ↓
+    PostgreSQL        ← БД</div>
+
+<ul>
+    <li><strong>JPA</strong> — <em>спецификация</em> (набор интерфейсов и аннотаций). Сама по себе ничего не делает</li>
+    <li><strong>Hibernate</strong> — <em>реализация</em> JPA. Генерит SQL, управляет транзакциями</li>
+    <li><strong>Spring Data JPA</strong> — надстройка. Даёт <code>JpaRepository</code> с готовыми методами</li>
+</ul>
+
+<h3>Ключевые аннотации JPA</h3>
+
+<table>
+    <tr><th>Аннотация</th><th>Что делает</th></tr>
+    <tr><td><code>@Entity</code></td><td>Класс → таблица БД</td></tr>
+    <tr><td><code>@Table(name = "events")</code></td><td>Явное имя таблицы</td></tr>
+    <tr><td><code>@Id</code></td><td>Первичный ключ</td></tr>
+    <tr><td><code>@GeneratedValue(strategy = IDENTITY)</code></td><td>id генерит БД (<code>BIGSERIAL</code>)</td></tr>
+    <tr><td><code>@Column(nullable = false, length = 200)</code></td><td><code>NOT NULL VARCHAR(200)</code></td></tr>
+    <tr><td><code>@Enumerated(EnumType.STRING)</code></td><td>Enum хранится как <strong>строка</strong>, а не число</td></tr>
+    <tr><td><code>@Transient</code></td><td>Поле НЕ сохраняется в БД</td></tr>
+</table>
+
+<blockquote><strong>Всегда используй <code>@Enumerated(EnumType.STRING)</code>.</strong> По умолчанию enum хранится как число (порядковый номер). Добавили новый статус в начало — данные в БД сломались. С STRING порядок в enum не важен.</blockquote>
+
+<h3>Требования JPA к entity</h3>
+<ol>
+    <li>Класс не <code>final</code> (Hibernate создаёт прокси-подклассы)</li>
+    <li><strong>Пустой конструктор обязателен</strong> — Hibernate использует его при чтении из БД</li>
+    <li><code>@Id</code> обязательно</li>
+    <li>Поля <code>private</code>, доступ через геттеры/сеттеры</li>
+    <li><strong>Не <code>record</code></strong> — record <code>final</code>, не подходит</li>
+</ol>
+
+<h3><code>JpaRepository</code></h3>
+
+<pre><code>public interface EventRepository extends JpaRepository&lt;Event, Long&gt; {
+    // и всё! Spring Data сгенерит реализацию на старте
+}</code></pre>
+
+<p><strong>Что даёт бесплатно:</strong> <code>save</code>, <code>findById</code>, <code>findAll</code>, <code>deleteById</code>, <code>existsById</code>, <code>count</code>, <code>deleteAll</code> — и ещё ~20 методов.</p>
+
+<h3><code>save()</code>: INSERT или UPDATE?</h3>
+
+<p>Hibernate смотрит на состояние объекта (метод <code>isNew()</code>):</p>
+<ul>
+    <li><code>id == null</code> → <strong>новый</strong> → <code>persist()</code> → INSERT</li>
+    <li><code>id != null</code> → <strong>существующий</strong> → <code>merge()</code> → UPDATE (или INSERT)</li>
+</ul>
+
+<blockquote><strong>Внимание:</strong> никаких SELECT в БД <code>save()</code> не делает! Решение — по состоянию Java-объекта.</blockquote>
+
+<h3>Persistence Context и Dirty Checking</h3>
+
+<p><strong>Persistence Context</strong> — «кэш первого уровня» Hibernate. Живёт <strong>в рамках транзакции</strong>.</p>
+
+<p><strong>Что даёт:</strong></p>
+<ul>
+    <li><code>findById</code> дважды в одной транзакции → <strong>один SELECT</strong> (второй из кэша)</li>
+    <li>Изменения <strong>managed</strong>-сущности → автоматический <code>UPDATE</code> при коммите</li>
+    <li>Все видят одно и то же состояние</li>
+</ul>
+
+<p><strong>Dirty Checking</strong> — Hibernate отслеживает изменения managed-сущностей и генерит <code>UPDATE</code> при завершении транзакции. Поэтому <code>save()</code> при update <strong>не обязателен</strong> внутри <code>@Transactional</code>.</p>
+
+<h3><code>@Transactional</code></h3>
+
+<p>Spring управляет транзакциями декларативно:</p>
+<pre><code>@Service
+@Transactional
+public class EventService { ... }</code></pre>
+
+<p><strong>Что происходит:</strong></p>
+<ol>
+    <li>Spring создаёт прокси вокруг сервиса</li>
+    <li>На входе метода: <code>transactionManager.begin()</code></li>
+    <li>Вызов реального метода</li>
+    <li>Успех → <code>commit()</code> (все изменения + dirty checking → БД)</li>
+    <li>RuntimeException → <code>rollback()</code></li>
+</ol>
+
+<p><strong>Правила:</strong></p>
+<ul>
+    <li><code>@Transactional</code> — на <strong>сервисе</strong>, не на контроллере</li>
+    <li><code>readOnly = true</code> — для <code>find*</code> методов (быстрее, без dirty checking)</li>
+    <li><strong>Не работает</strong> через self-invocation (вызов изнутри класса)</li>
+    <li>По умолчанию rollback только на <code>RuntimeException</code></li>
+    <li>Работает только на <code>public</code> методах</li>
+</ul>
+
+<h3>Пагинация: <code>Pageable</code> + <code>Page&lt;T&gt;</code></h3>
+
+<p><strong>Зачем:</strong> если в БД 1M строк, без пагинации <code>findAll()</code> вытянет всё в память → OOM.</p>
+
+<table>
+    <tr><th>Интерфейс</th><th>Роль</th></tr>
+    <tr><td><code>Pageable</code></td><td>Входной параметр: <code>page</code>, <code>size</code>, <code>sort</code></td></tr>
+    <tr><td><code>Page&lt;T&gt;</code></td><td>Результат: <code>content</code>, <code>totalElements</code>, <code>totalPages</code>, <code>number</code>, <code>first</code>, <code>last</code></td></tr>
+</table>
+
+<p>Spring Boot автоматически парсит <code>?page=0&amp;size=20&amp;sort=date,desc</code> в <code>Pageable</code>.</p>
+
+<p><strong>SQL от Hibernate при пагинации — ДВА запроса:</strong></p>
+<pre><code>SELECT ... FROM events ORDER BY date DESC LIMIT 20 OFFSET 0;
+SELECT count(*) FROM events;</code></pre>
+
+<p>Первый — данные страницы. Второй — <code>count</code> для <code>totalElements</code> и <code>totalPages</code>.</p>
+
+<h3>Docker Compose</h3>
+
+<p>Файл <code>docker-compose.yml</code> описывает <strong>набор контейнеров</strong>. Команды:</p>
+
+<table>
+    <tr><th>Команда</th><th>Что делает</th></tr>
+    <tr><td><code>docker compose up -d</code></td><td>Поднять в фоне</td></tr>
+    <tr><td><code>docker compose down</code></td><td>Остановить (данные в volume сохраняются)</td></tr>
+    <tr><td><code>docker compose down -v</code></td><td>Остановить + <strong>удалить volume (все данные!)</strong></td></tr>
+    <tr><td><code>docker ps</code></td><td>Список запущенных контейнеров</td></tr>
+    <tr><td><code>docker logs &lt;name&gt;</code></td><td>Логи контейнера</td></tr>
+    <tr><td><code>docker exec -it &lt;name&gt; &lt;cmd&gt;</code></td><td>Выполнить команду внутри</td></tr>
+</table>
+
+<h2 id="steps">💻 Пошаговая инструкция</h2>
+
+<h3>Шаг 1. Зависимости в <code>pom.xml</code></h3>
+
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springframework.boot&lt;/groupId&gt;
+    &lt;artifactId&gt;spring-boot-starter-data-jpa&lt;/artifactId&gt;
+&lt;/dependency&gt;
+&lt;dependency&gt;
+    &lt;groupId&gt;org.postgresql&lt;/groupId&gt;
+    &lt;artifactId&gt;postgresql&lt;/artifactId&gt;
+    &lt;scope&gt;runtime&lt;/scope&gt;
+&lt;/dependency&gt;</code></pre>
+
+<h3>Шаг 2. <code>docker-compose.yml</code> в корне проекта</h3>
+
+<pre><code>services:
+  postgres:
+    image: postgres:16-alpine
+    container_name: booking-postgres
+    environment:
+      POSTGRES_DB: booking
+      POSTGRES_USER: booking
+      POSTGRES_PASSWORD: booking
+    ports:
+      - "5432:5432"
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U booking"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+volumes:
+  postgres-data:</code></pre>
+
+<p><strong>Разбор:</strong></p>
+<ul>
+    <li><code>volumes</code> — данные <strong>сохраняются</strong> между перезапусками. Без него <code>down</code> удалит всё</li>
+    <li><code>healthcheck</code> — Docker проверяет, что Postgres реально готов, а не просто «запустился»</li>
+    <li><code>ports: 5432:5432</code> — проброс порта (доступ с хоста)</li>
+</ul>
+
+<h3>Шаг 3. Запустить БД</h3>
+
+<pre><code>docker compose up -d
+docker ps   # контейнер booking-postgres должен быть Up (healthy)</code></pre>
+
+<h3>Шаг 4. <code>application.yml</code></h3>
+
+<pre><code>spring:
+  application:
+    name: ticket-booking-service
+
+  datasource:
+    url: jdbc:postgresql://localhost:5432/booking
+    username: booking
+    password: booking
+    driver-class-name: org.postgresql.Driver
+
+  jpa:
+    hibernate:
+      ddl-auto: update   # потом заменим на validate (в Спринте 4)
+    show-sql: true
+    properties:
+      hibernate:
+        format_sql: true
+        dialect: org.hibernate.dialect.PostgreSQLDialect
+
+  data:
+    web:
+      pageable:
+        default-page-size: 20
+        max-page-size: 100
+        one-indexed-parameters: false
+
+server:
+  port: 8080
+
+logging:
+  level:
+    org.hibernate.SQL: debug
+    org.hibernate.type.descriptor.sql.BasicBinder: trace</code></pre>
+
+<p><strong>Что делает:</strong></p>
+<ul>
+    <li><code>show-sql: true</code> — SQL в логах</li>
+    <li><code>format_sql</code> — красивое форматирование SQL</li>
+    <li><code>BasicBinder: trace</code> — показывать <strong>значения</strong> параметров, а не <code>?</code></li>
+    <li><code>default-page-size / max-page-size</code> — дефолт и лимит пагинации</li>
+</ul>
+
+<h3>Шаг 5. <code>Event</code> → <code>@Entity</code></h3>
+
+<pre><code>@Entity
+@Table(name = "events")
+public class Event {
+
+    @Id
+    @GeneratedValue(strategy = GenerationType.IDENTITY)
+    private Long id;
+
+    @Column(nullable = false, length = 200)
+    private String name;
+
+    @Column(nullable = false)
+    private LocalDateTime date;
+
+    @Column(nullable = false, length = 300)
+    private String venue;
+
+    @Enumerated(EnumType.STRING)
+    @Column(nullable = false, length = 20)
+    private Status status;
+
+    public Event() {}   // ← пустой конструктор обязателен для JPA!
+
+    public Event(Long id, String name, LocalDateTime date, String venue, Status status) { ... }
+    // геттеры/сеттеры
+}</code></pre>
+
+<h3>Шаг 6. Repository → JPA</h3>
+
+<pre><code>@Repository
+public interface EventRepository extends JpaRepository&lt;Event, Long&gt; {
+}</code></pre>
+
+<p>Всё. Реализацию Spring Data сгенерит сам. Методы <code>save</code>, <code>findById</code>, <code>findAll</code>, <code>deleteById</code>, <code>existsById</code> — те же имена, что были в <code>Map</code>-версии. <strong>Сервис и контроллер не меняются.</strong></p>
+
+<h3>Шаг 7. <code>EventService</code> с <code>@Transactional</code></h3>
+
+<pre><code>@Service
+@Transactional
+public class EventService {
+
+    private final EventRepository eventRepository;
+
+    public EventService(EventRepository eventRepository) { this.eventRepository = eventRepository; }
+
+    public EventResponse create(CreateEventRequest request) {
+        Event event = new Event(null, request.name(), request.date(),
+                                request.venue(), Status.AVAILABLE);
+        return EventResponse.from(eventRepository.save(event));
+    }
+
+    @Transactional(readOnly = true)
+    public EventResponse findById(Long id) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -&gt; new EventNotFoundException(id));
+        return EventResponse.from(event);
+    }
+
+    @Transactional(readOnly = true)
+    public Page&lt;EventResponse&gt; findAll(Pageable pageable) {
+        return eventRepository.findAll(pageable).map(EventResponse::from);
+    }
+
+    public EventResponse update(Long id, UpdateEventRequest request) {
+        Event event = eventRepository.findById(id)
+                .orElseThrow(() -&gt; new EventNotFoundException(id));
+        event.setName(request.name());
+        event.setDate(request.date());
+        event.setVenue(request.venue());
+        event.setStatus(request.status());
+        return EventResponse.from(event);   // save() НЕ нужен — dirty checking
+    }
+
+    public void delete(Long id) {
+        if (!eventRepository.existsById(id)) throw new EventNotFoundException(id);
+        eventRepository.deleteById(id);
+    }
+}</code></pre>
+
+<h3>Шаг 8. Controller — <code>Pageable</code></h3>
+
+<pre><code>@GetMapping
+public Page&lt;EventResponse&gt; findAll(Pageable pageable) {
+    return eventService.findAll(pageable);
+}</code></pre>
+
+<p>Spring сам распарсит <code>?page=0&amp;size=20&amp;sort=date,desc</code>.</p>
+
+<h3>Шаг 9. Проверка</h3>
+
+<ul>
+    <li>POST → <code>201 Created</code>, id сгенерился</li>
+    <li>GET /{id} → <code>200 OK</code></li>
+    <li>PUT /{id} → обновление работает <strong>без <code>save()</code></strong></li>
+    <li>GET ?page=0&amp;size=2 → в JSON видны <code>content</code>, <code>totalElements</code>, <code>totalPages</code></li>
+    <li>Перезапусти приложение → данные <strong>остались</strong> в БД</li>
+    <li>Проверь в <code>psql</code>:</li>
+</ul>
+
+<pre><code>docker exec -it booking-postgres psql -U booking -d booking
+\dt
+SELECT * FROM events;
+\q</code></pre>
+
+<h2 id="pitfalls">⚠️ Подводные камни</h2>
+
+<table>
+    <tr><th>Проблема</th><th>Что делать</th></tr>
+    <tr><td>JPA требует <strong>пустой конструктор</strong></td><td>Добавь <code>public Event() {}</code> — Hibernate использует его при чтении из БД</td></tr>
+    <tr><td>Enum без <code>@Enumerated(STRING)</code> сохраняется как число</td><td>Всегда указывай <code>@Enumerated(EnumType.STRING)</code></td></tr>
+    <tr><td>Dirty checking не работает без <code>@Transactional</code></td><td><code>save()</code> при update <strong>обязателен</strong> вне транзакции. С <code>@Transactional</code> — не обязателен</td></tr>
+    <tr><td><code>@Transactional</code> изнутри класса</td><td>Прокси перехватывает только <strong>внешние</strong> вызовы. Self-invocation обходит прокси — транзакция не создаётся</td></tr>
+    <tr><td>Rollback только на <code>RuntimeException</code></td><td>Checked-исключения не откатывают транзакцию. Указывай <code>rollbackFor = Exception.class</code> если нужно</td></tr>
+    <tr><td>Пагинация без <code>max-page-size</code></td><td>Клиент запросит <code>?size=1000000</code> → OOM. Ограничивай <code>max-page-size</code></td></tr>
+    <tr><td>Данные пропадают после <code>docker compose down</code></td><td>Использовал <code>-v</code>? Он <strong>удаляет volume</strong>. Используй <code>down</code> без <code>-v</code></td></tr>
+    <tr><td><code>HikariPool</code> не стартует</td><td>Проверь <code>docker ps</code> — контейнер должен быть <code>healthy</code>, не просто «запущен». Иначе подожди 5-10 сек</td></tr>
+</table>
+
+<h2 id="mistakes">🐞 Частые ошибки на практике</h2>
+
+<div class="mistake">
+    <div class="mistake-title">1. Забыл пустой конструктор в <code>@Entity</code></div>
+    <pre><code>@Entity
+public class Event {
+    private Long id;
+    // конструктор только со всеми полями
+    public Event(Long id, String name, ...) { ... }
+}</code></pre>
+    Hibernate при чтении из БД вызывает <strong>пустой</strong> конструктор, потом заполняет поля через рефлексию. Без него — <code>InstantiationException</code> или <code>NoSuchMethodException</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">2. Enum без <code>@Enumerated(STRING)</code> — данные сломались</div>
+    По умолчанию <code>@Enumerated</code> использует <code>ORDINAL</code> — хранит <strong>число</strong> (<code>AVAILABLE = 0</code>). Добавил новый статус в начало enum — старые данные стали означать другое. <strong>Решение:</strong> всегда <code>@Enumerated(EnumType.STRING)</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">3. <code>save()</code> не возвращает привязанный объект</div>
+    <pre><code>Event event = new Event(...);
+eventRepository.save(event);   // ❌ вернул managed, но result отброшен
+return EventResponse.from(event);  // event может быть transient
+</code></pre>
+    <strong>Решение:</strong> <code>Event saved = eventRepository.save(event); return EventResponse.from(saved);</code>. Возвращённый объект — managed, привязан к persistence context.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">4. Убрали <code>save()</code> в update, но транзакции нет</div>
+    <pre><code>@Service
+public class EventService {  // ❌ @Transactional нет
+    public EventResponse update(Long id, UpdateEventRequest req) {
+        Event event = eventRepository.findById(id).orElseThrow(...);
+        event.setName(req.name());
+        return EventResponse.from(event);   // изменения НЕ сохранятся
+    }
+}</code></pre>
+    Без <code>@Transactional</code> нет persistence context — нет dirty checking. Изменения в памяти, БД не тронута. <strong>Решение:</strong> либо <code>@Transactional</code> на сервисе, либо явный <code>save()</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">5. Пагинация без <code>sort</code> — нестабильный порядок</div>
+    <pre><code>GET /api/v1/events?page=0&amp;size=20   // без sort</code></pre>
+    PostgreSQL не гарантирует порядок без <code>ORDER BY</code>. Одна и та же страница на разных запросах может вернуть <strong>разные данные</strong> — клиент пропустит или задублирует записи. <strong>Решение:</strong> всегда указывай <code>sort</code> по уникальному полю (лучше — по <code>id</code>).
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">6. Два <code>findById</code> ожидают один SQL, но получают два</div>
+    Причина — вызовы в <strong>разных транзакциях</strong> или без <code>@Transactional</code>. Persistence context живёт в рамках транзакции. <strong>Решение:</strong> оборачивай методы сервиса в <code>@Transactional</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">7. <code>ddl-auto: update</code> на проде</div>
+    <code>update</code> никогда не удаляет колонки, не обрабатывает переименования, может генерировать странные ALTER'ы. На проде — <strong>опасно</strong>. <strong>Решение:</strong> использовать Liquibase (Спринт 4) + <code>ddl-auto: validate</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">8. <code>docker compose down -v</code> «случайно»</div>
+    <code>-v</code> удаляет <strong>volume</strong> — все данные БД пропадут. На проде это катастрофа. <strong>Решение:</strong> используй <code>down</code> без <code>-v</code>. <code>-v</code> — только когда сознательно хочешь «сбросить» БД.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">9. Hibernate SQL без значений параметров</div>
+    <pre><code>select e1_0.id, e1_0.name from events e1_0 where e1_0.id=?</code></pre>
+    Видно <code>?</code>, а не значение. <strong>Решение:</strong> добавить в <code>application.yml</code>:
+    <pre><code>logging.level.org.hibernate.type.descriptor.sql.BasicBinder: trace</code></pre>
+    Тогда в логах будут реальные значения рядом с <code>?</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">10. <code>findAll()</code> вместо <code>findAll(Pageable)</code> на больших таблицах</div>
+    <pre><code>List&lt;Event&gt; all = eventRepository.findAll();   // ❌ вытянет ВСЮ таблицу в память
+</code></pre>
+    На 1M строк — <code>OutOfMemoryError</code> или долгий ответ. <strong>Решение:</strong> всегда <code>findAll(Pageable)</code> для API-списков.
+</div>
+
+<h2 id="interview">❓ Вопросы на собеседование</h2>
+
+<p class="question">1. Чем JPA отличается от Hibernate?</p>
+<div class="answer">
+    <strong>JPA</strong> — спецификация (стандарт Jakarta EE): набор интерфейсов и аннотаций (<code>@Entity</code>, <code>@Id</code>). <strong>Hibernate</strong> — <em>реализация</em> JPA: конкретный код, который генерит SQL. Можно заменить Hibernate на EclipseLink, OpenJPA — код не изменится. <strong>Spring Data JPA</strong> — надстройка над JPA: даёт <code>JpaRepository</code> с готовыми методами. В стеке: Spring Data JPA → JPA → Hibernate → PostgreSQL.
+</div>
+
+<p class="question">2. Что такое persistence context и dirty checking?</p>
+<div class="answer">
+    <strong>Persistence context</strong> — «кэш первого уровня» Hibernate в рамках транзакции. Все сущности, загруженные или сохранённые, становятся <em>managed</em>. <strong>Dirty checking</strong> — механизм: Hibernate сравнивает текущее состояние managed-сущностей с их снимком при загрузке. Если есть изменения — автоматически генерит <code>UPDATE</code> при коммите транзакции. Благодаря этому <code>save()</code> при update внутри <code>@Transactional</code> <strong>не обязателен</strong>.
+</div>
+
+<p class="question">3. Как <code>save()</code> определяет INSERT или UPDATE?</p>
+<div class="answer">
+    Через <code>entityInformation.isNew(entity)</code>. По умолчанию — проверка <strong><code>id == null</code></strong>. Если id null → <code>persist()</code> → INSERT, если не null → <code>merge()</code> → UPDATE (или INSERT, если строки нет). <strong>В БД <code>save()</code> не смотрит!</strong> Только на состояние Java-объекта. Можно переопределить через <code>Persistable</code> или <code>@Version</code>.
+</div>
+
+<p class="question">4. Что такое <code>@Transactional</code> и где его ставить?</p>
+<div class="answer">
+    <code>@Transactional</code> — декларативное управление транзакциями. Spring создаёт <strong>прокси</strong> вокруг сервиса, оборачивает метод в BEGIN / COMMIT / ROLLBACK. Ставить — <strong>на сервисе</strong>, не на контроллере (HTTP не должен знать о БД) и не на репозитории (Spring Data уже ставит). Для <code>find*</code> — <code>@Transactional(readOnly = true)</code>. <strong>Не работает</strong> при self-invocation (вызов изнутри того же класса) и на не-public методах. По умолчанию rollback только на <code>RuntimeException</code>.
+</div>
+
+<p class="question">5. Почему <code>@Enumerated(EnumType.STRING)</code> лучше ORDINAL?</p>
+<div class="answer">
+    <code>ORDINAL</code> хранит порядковый номер enum (0, 1, 2). <strong>Проблема:</strong> добавили новый статус в начало enum — сдвинулись все числа, старые данные стали означать другое. Например, <code>AVAILABLE</code> был 0, стал 1. Данные в БД сломались. <code>STRING</code> хранит имя (<code>"AVAILABLE"</code>) — порядок в enum не важен. Минус: чуть больше места в БД. <strong>Всегда используй STRING.</strong>
+</div>
+
+<p class="question">6. Зачем пагинация и как она работает в Spring Data?</p>
+<div class="answer">
+    Пагинация — разбиение результата на страницы, чтобы не вытянуть миллион строк в память. В Spring Data: <code>Pageable</code> (вход: page, size, sort) → <code>Page&lt;T&gt;</code> (выход: content + метаданные). Spring Boot автоматически парсит <code>?page=0&amp;size=20&amp;sort=date,desc</code>. Под капотом — <strong>два SQL</strong>: <code>LIMIT/OFFSET</code> для данных и <code>count(*)</code> для <code>totalElements</code>. Без count используй <code>Slice&lt;T&gt;</code> — быстрее на больших таблицах.
+</div>
+
+<p class="question">7. Почему после смены <code>Map</code> на PostgreSQL не менялся сервис?</p>
+<div class="answer">
+    Потому что <strong>слоистая архитектура</strong> изолирует слои. <code>EventRepository</code> — это абстракция: у неё есть методы <code>save</code>, <code>findById</code>, <code>findAll</code>, <code>deleteById</code>. <code>JpaRepository</code> даёт те же имена. Сервис не знает, где данные — в Map или в БД. Заменили только реализацию (2 класса). Контроллер, DTO, обработчик ошибок — не тронуты. Это главный аргумент за слоистую архитектуру.
+</div>
+
+<p class="question">8. Что произойдёт, если из метода с <code>@Transactional</code> вылетит RuntimeException?</p>
+<div class="answer">
+    Spring сделает <strong>rollback</strong> — все изменения в БД, сделанные в этой транзакции, откатятся. По умолчанию — только для <code>RuntimeException</code> и его наследников. <strong>Checked-исключения</strong> (<code>IOException</code>, <code>SQLException</code>) — <strong>не откатывают</strong>. Если нужно — укажи <code>@Transactional(rollbackFor = Exception.class)</code>. Это важное различие: Spring считает checked-ошибки «ожидаемыми», а RuntimeException — «багом».
+</div>
+
+<h2 id="checklist">📌 Чеклист самопроверки</h2>
+
+<ul class="checklist">
+    <li>PostgreSQL запущен через Docker Compose (healthcheck работает)</li>
+    <li>Понимаю разницу volume / без volume в <code>docker compose down</code></li>
+    <li>Spring Boot подключается к БД через HikariCP</li>
+    <li><code>Event</code> — <code>@Entity</code> с пустым конструктором и <code>@Enumerated(STRING)</code></li>
+    <li>Repository — интерфейс <code>JpaRepository</code> без реализации</li>
+    <li>Понимаю, как <code>save()</code> решает INSERT vs UPDATE</li>
+    <li>Освоил persistence context и dirty checking</li>
+    <li><code>@Transactional</code> на сервисе, <code>readOnly</code> на find</li>
+    <li>Пагинация работает: <code>Pageable</code> + <code>Page&lt;T&gt;</code></li>
+    <li>Знаю, почему для пагинации <strong>два</strong> SQL-запроса</li>
+    <li>Понимаю, почему <code>save()</code> в update можно убрать</li>
+    <li>Знаю, что <code>@Transactional</code> не работает через self-invocation</li>
+</ul>
+
+</body>
+</html>

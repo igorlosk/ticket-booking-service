@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Спринт 4 — Liquibase</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #24292e; }
+        h1 { color: #0366d6; border-bottom: 2px solid #0366d6; padding-bottom: 8px; margin-top: 40px; }
+        h2 { color: #24292e; border-bottom: 1px solid #e1e4e8; padding-bottom: 6px; margin-top: 32px; }
+        h3 { color: #24292e; margin-top: 24px; }
+        code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 0.9em; color: #d73a49; }
+        pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; border-left: 4px solid #0366d6; font-size: 0.9em; line-height: 1.45; }
+        pre code { background: none; padding: 0; color: #24292e; }
+        table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+        th, td { border: 1px solid #d1d5da; padding: 8px 12px; text-align: left; }
+        th { background: #f6f8fa; font-weight: 600; }
+        blockquote { border-left: 4px solid #0366d6; padding-left: 16px; color: #6a737d; margin: 16px 0; font-style: italic; }
+        .checklist { list-style: none; padding-left: 0; }
+        .checklist li::before { content: "☐ "; color: #0366d6; font-weight: bold; }
+        .answer { background: #f0fff4; border-left: 4px solid #28a745; padding: 12px 16px; margin: 8px 0; }
+        .question { font-weight: 600; color: #0366d6; margin-top: 20px; }
+        .toc { background: #f6f8fa; padding: 16px 24px; border-radius: 6px; }
+        .toc a { color: #0366d6; text-decoration: none; }
+        .meta { color: #6a737d; font-size: 0.9em; font-style: italic; margin-bottom: 24px; }
+        .mistake { background: #ffeef0; border-left: 4px solid #d73a49; padding: 12px 16px; margin: 12px 0; }
+        .mistake-title { font-weight: 600; color: #d73a49; margin-bottom: 6px; }
+        .flow-diagram { background: #f6f8fa; padding: 20px; border-radius: 6px; font-family: monospace; line-height: 1.8; margin: 16px 0; white-space: pre; overflow-x: auto; }
+        @media print { body { margin: 0; max-width: 100%; } h1 { page-break-before: always; } h1:first-of-type { page-break-before: avoid; } pre { page-break-inside: avoid; } table { page-break-inside: avoid; } .mistake { page-break-inside: avoid; } }
+    </style>
+</head>
+<body>
+
+<h1>Спринт 4: Liquibase — контроль версий схемы БД</h1>
+
+<p class="meta">Проект: <strong>Ticket Booking Service</strong> · Стек: Liquibase 4.x, Hibernate validate, PostgreSQL</p>
+
+<div class="toc">
+    <strong>Содержание</strong>
+    <ol>
+        <li><a href="#goals">Цели спринта</a></li>
+        <li><a href="#theory">Теория</a></li>
+        <li><a href="#steps">Пошаговая инструкция</a></li>
+        <li><a href="#pitfalls">Подводные камни</a></li>
+        <li><a href="#mistakes">Частые ошибки на практике</a></li>
+        <li><a href="#interview">Вопросы на собеседование</a></li>
+        <li><a href="#checklist">Чеклист самопроверки</a></li>
+    </ol>
+</div>
+
+<h2 id="goals">🎯 Цели спринта</h2>
+<ul>
+    <li>Понять, почему <code>ddl-auto: update</code> — плохо для прода</li>
+    <li>Освоить Liquibase: master changelog, changeset, миграции</li>
+    <li>Переключиться на <code>ddl-auto: validate</code></li>
+    <li>Научиться добавлять колонки через миграции (а не через Hibernate)</li>
+    <li>Понять порядок деплоя: миграция → код → validate</li>
+</ul>
+
+<h2 id="theory">📚 Теория</h2>
+
+<h3>Проблемы <code>ddl-auto: update</code></h3>
+
+<p>Hibernate управляет схемой по модели. Это удобно в разработке, но <strong>опасно в продакшене</strong>:</p>
+
+<table>
+    <tr><th>Сценарий</th><th>Что делает Hibernate</th><th>Проблема</th></tr>
+    <tr><td>Добавили <code>String description</code> как <code>NOT NULL</code></td><td><code>ALTER TABLE ADD COLUMN ... NOT NULL</code></td><td>Упадёт, если есть строки — нечем заполнить</td></tr>
+    <tr><td>Переименовали <code>venue</code> → <code>location</code></td><td><code>ADD COLUMN location</code> (не переименует)</td><td>Данные в <code>venue</code> потеряются</td></tr>
+    <tr><td>Удалили поле</td><td><strong>Ничего</strong></td><td>Мусорные колонки копятся</td></tr>
+    <tr><td>Нет истории изменений</td><td>—</td><td>Нельзя понять, что и когда менялось</td></tr>
+    <tr><td>Нет отката</td><td>—</td><td>Откатить деплой нельзя</td></tr>
+</table>
+
+<blockquote><strong>Правило:</strong> <code>ddl-auto: update</code> — только для прототипов. В продакшене — Liquibase (или Flyway) + <code>ddl-auto: validate</code>.</blockquote>
+
+<h3>Что такое Liquibase</h3>
+
+<p><strong>Liquibase</strong> — инструмент контроля версий схемы БД. Идея:</p>
+
+<blockquote>Схема БД — это код. Он должен быть в репозитории, версионироваться, проходить ревью и применяться контролируемо.</blockquote>
+
+<p>Аналогия: <strong>Git — для кода, Liquibase — для схемы БД</strong>.</p>
+
+<h3>Структура проекта с Liquibase</h3>
+
+<pre><code>src/main/resources/db/changelog/
+├── db.changelog-master.xml          ← точка входа (список миграций)
+└── changes/
+    ├── 001-create-events-table.xml
+    ├── 002-add-description-to-events.xml
+    └── ...</code></pre>
+
+<h3>Как это работает</h3>
+
+<div class="flow-diagram">Старт приложения
+    ↓
+    Liquibase читает db.changelog-master.xml
+    ↓
+    Смотрит таблицу DATABASECHANGELOG: что уже применено
+    ↓
+    Применяет ТОЛЬКО новые changeset'ы
+    ↓
+    Записывает их в DATABASECHANGELOG
+    ↓
+    Hibernate validate: сверяет схему с @Entity
+    ↓
+    Если совпадает → приложение стартует
+    Если нет     → падает с SchemaManagementException</div>
+
+<h3>Changeset — единица миграции</h3>
+
+<pre><code>&lt;changeSet id="001-create-events-table" author="igor"&gt;
+    &lt;createTable tableName="events"&gt;
+        ...
+    &lt;/createTable&gt;
+&lt;/changeSet&gt;</code></pre>
+
+<p><strong>Ключевые правила:</strong></p>
+<ul>
+    <li><strong><code>id</code> + <code>author</code></strong> = уникальный идентификатор</li>
+    <li><strong>Иммутабельность:</strong> применил changeset — <strong>не меняешь его никогда</strong></li>
+    <li>Нужно изменить — <strong>создай новый changeset</strong></li>
+    <li>Liquibase хранит <strong>checksum</strong> — если изменишь применённый, упадёт с ошибкой</li>
+</ul>
+
+<h3>Форматы описания миграций</h3>
+
+<table>
+    <tr><th>Формат</th><th>Плюсы</th><th>Минусы</th></tr>
+    <tr><td><strong>XML</strong></td><td>Стандарт индустрии, кросс-БД, много примеров</td><td>Многословно</td></tr>
+    <tr><td>YAML</td><td>Компактнее</td><td>Меньше примеров</td></tr>
+    <tr><td>JSON</td><td>Компактно</td><td>Редко используется</td></tr>
+    <tr><td>SQL</td><td>Прямой SQL, знакомо</td><td>Привязка к диалекту БД</td></tr>
+</table>
+
+<p>Используем <strong>XML</strong> — работает одинаково на PostgreSQL, MySQL, Oracle.</p>
+
+<h3><code>ddl-auto: validate</code> — защита от рассинхрона</h3>
+
+<p><strong>Что значит <code>validate</code>:</strong> Hibernate при старте <strong>сверяет</strong> Java-модель со схемой БД. Если что-то не совпадает — <strong>падает</strong>.</p>
+
+<table>
+    <tr><th>Значение</th><th>Поведение</th><th>Когда использовать</th></tr>
+    <tr><td><code>none</code></td><td>Ничего не делает</td><td>Прод + миграции</td></tr>
+    <tr><td><code>validate</code></td><td>Проверяет схему с <code>@Entity</code></td><td><strong>Прод</strong></td></tr>
+    <tr><td><code>update</code></td><td>Добавляет колонки/таблицы</td><td>Только прототипы</td></tr>
+    <tr><td><code>create</code></td><td>Удаляет и создаёт заново</td><td>Тесты</td></tr>
+</table>
+
+<h3>Служебные таблицы Liquibase</h3>
+
+<table>
+    <tr><th>Таблица</th><th>Назначение</th></tr>
+    <tr><td><code>databasechangelog</code></td><td>История применённых миграций (id, author, filename, dateexecuted, checksum)</td></tr>
+    <tr><td><code>databasechangeloglock</code></td><td>Блокировки — чтобы два инстанса не накатили одно и то же одновременно</td></tr>
+</table>
+
+<h3>Правильный порядок деплоя</h3>
+
+<div class="flow-diagram">1. Пишем миграцию (002-add-description.xml)
+    2. Добавляем её в master changelog
+    3. Коммитим в Git
+    4. Деплоим на сервер
+    5. Liquibase ПРИМЕНЯЕТ миграцию при старте
+    6. Hibernate VALIDATE проверяет схему
+    7. Приложение работает</div>
+
+<p><strong>Гарантия:</strong> приложение <strong>не запустится</strong>, если код ожидает колонку, которой нет в БД.</p>
+
+<h2 id="steps">💻 Пошаговая инструкция</h2>
+
+<h3>Шаг 1. Зависимость в <code>pom.xml</code></h3>
+
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.liquibase&lt;/groupId&gt;
+    &lt;artifactId&gt;liquibase-core&lt;/artifactId&gt;
+&lt;/dependency&gt;</code></pre>
+
+<p>Версию не указываем — Spring Boot parent сам подберёт совместимую.</p>
+
+<h3>Шаг 2. Обновить <code>application.yml</code></h3>
+
+<pre><code>spring:
+  jpa:
+    hibernate:
+      ddl-auto: validate        # ← ИЗМЕНИЛИ: update → validate
+
+  liquibase:
+    enabled: true
+    change-log: classpath:db/changelog/db.changelog-master.xml
+
+logging:
+  level:
+    liquibase: info</code></pre>
+
+<h3>Шаг 3. Очистить БД (для учебного проекта)</h3>
+
+<pre><code>docker compose down -v    # -v удаляет volume (все данные!)
+docker compose up -d</code></pre>
+
+<p>Потому что таблица <code>events</code> уже создана Hibernate. Если Liquibase попробует её создать — <code>relation "events" already exists</code>.</p>
+
+<h3>Шаг 4. Создать master changelog</h3>
+
+<p>Файл: <code>src/main/resources/db/changelog/db.changelog-master.xml</code></p>
+
+<pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd"&gt;
+
+    &lt;include file="db/changelog/changes/001-create-events-table.xml"
+             relativeToChangelogFile="false"/&gt;
+
+&lt;/databaseChangeLog&gt;</code></pre>
+
+<h3>Шаг 5. Первая миграция — <code>createTable</code></h3>
+
+<p>Файл: <code>src/main/resources/db/changelog/changes/001-create-events-table.xml</code></p>
+
+<pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd"&gt;
+
+    &lt;changeSet id="001-create-events-table" author="igor"&gt;
+
+        &lt;createTable tableName="events"&gt;
+            &lt;column name="id" type="BIGINT" autoIncrement="true"&gt;
+                &lt;constraints primaryKey="true" nullable="false"/&gt;
+            &lt;/column&gt;
+            &lt;column name="name" type="VARCHAR(200)"&gt;
+                &lt;constraints nullable="false"/&gt;
+            &lt;/column&gt;
+            &lt;column name="date" type="TIMESTAMP"&gt;
+                &lt;constraints nullable="false"/&gt;
+            &lt;/column&gt;
+            &lt;column name="venue" type="VARCHAR(300)"&gt;
+                &lt;constraints nullable="false"/&gt;
+            &lt;/column&gt;
+            &lt;column name="status" type="VARCHAR(20)"&gt;
+                &lt;constraints nullable="false"/&gt;
+            &lt;/column&gt;
+        &lt;/createTable&gt;
+
+    &lt;/changeSet&gt;
+
+&lt;/databaseChangeLog&gt;</code></pre>
+
+<h3>Шаг 6. Запустить приложение</h3>
+
+<p>В логах должно быть:</p>
+
+<pre><code>INFO liquibase.lockservice : Successfully acquired change log lock
+INFO liquibase.changelog    : Creating database history table with name: public.databasechangelog
+INFO liquibase.changelog    : Running Changeset: db/changelog/changes/001-create-events-table.xml::001-create-events-table::igor
+INFO liquibase.changelog    : ChangeSet ... ran successfully
+INFO liquibase.lockservice : Successfully released change log lock
+...
+Started TicketBookingServiceApplication in X.XXX seconds</code></pre>
+
+<h3>Шаг 7. Проверить в <code>psql</code></h3>
+
+<pre><code>docker exec -it booking-postgres psql -U booking -d booking
+
+\dt
+-- Ожидаемо: events, databasechangelog, databasechangeloglock
+
+SELECT id, author, filename FROM databasechangelog;
+-- Ожидаемо: 001-create-events-table | igor | db/changelog/changes/001-create-events-table.xml
+
+\d events
+-- Ожидаемо: структура таблицы
+
+\q</code></pre>
+
+<h3>Шаг 8. Добавляем поле <code>description</code> через миграцию</h3>
+
+<p><strong>Создаём миграцию <code>002-add-description-to-events.xml</code>:</strong></p>
+
+<pre><code>&lt;?xml version="1.0" encoding="UTF-8"?&gt;
+&lt;databaseChangeLog
+        xmlns="http://www.liquibase.org/xml/ns/dbchangelog"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xsi:schemaLocation="http://www.liquibase.org/xml/ns/dbchangelog
+                            http://www.liquibase.org/xml/ns/dbchangelog/dbchangelog-4.20.xsd"&gt;
+
+    &lt;changeSet id="002-add-description-to-events" author="igor"&gt;
+
+        &lt;addColumn tableName="events"&gt;
+            &lt;column name="description" type="VARCHAR(1000)"/&gt;
+        &lt;/addColumn&gt;
+
+    &lt;/changeSet&gt;
+
+&lt;/databaseChangeLog&gt;</code></pre>
+
+<p><strong>Добавляем <code>include</code> в master changelog:</strong></p>
+
+<pre><code>&lt;include file="db/changelog/changes/002-add-description-to-events.xml"
+         relativeToChangelogFile="false"/&gt;</code></pre>
+
+<p><strong>Обновляем Java-код:</strong></p>
+
+<ul>
+    <li><code>Event.java</code> — добавляем <code>@Column(length = 1000) private String description;</code> + геттер/сеттер</li>
+    <li><code>CreateEventRequest</code> — добавляем <code>String description</code></li>
+    <li><code>UpdateEventRequest</code> — добавляем <code>String description</code></li>
+    <li><code>EventResponse</code> — добавляем <code>String description</code> + в <code>from()</code></li>
+    <li><code>EventService.create</code> — <code>event.setDescription(request.description())</code></li>
+    <li><code>EventService.update</code> — <code>event.setDescription(request.description())</code></li>
+</ul>
+
+<h3>Шаг 9. Запустить и проверить</h3>
+
+<ul>
+    <li>Liquibase применит миграцию <code>002</code></li>
+    <li>Hibernate validate пройдёт</li>
+    <li>В <code>databasechangelog</code> — <strong>две</strong> строки</li>
+    <li>POST с <code>description</code> сохранится и вернётся</li>
+</ul>
+
+<h2 id="pitfalls">⚠️ Подводные камни</h2>
+
+<table>
+    <tr><th>Проблема</th><th>Что делать</th></tr>
+    <tr><td><code>relation "events" already exists</code></td><td>Таблица уже есть — очисти БД: <code>docker compose down -v &amp;&amp; docker compose up -d</code></td></tr>
+    <tr><td><code>Schema-validation: missing table [events]</code></td><td>Liquibase не применил миграцию. Проверь, что файл в <code>resources/db/changelog/</code> и указан в master</td></tr>
+    <tr><td><code>Schema-validation: missing column [description]</code></td><td>Модель ожидает колонку, а в БД её нет. Создай новую миграцию <code>addColumn</code></td></tr>
+    <tr><td><code>checksum validation failed</code></td><td>Изменил применённый changeset. Не трогай его — создай новый. Или почисти <code>databasechangelog</code> (для dev)</td></tr>
+    <tr><td>Liquibase не стартует</td><td>Проверь <code>spring.liquibase.change-log</code> и что файл существует по этому пути</td></tr>
+    <tr><td>Хочешь откатить миграцию</td><td>Liquibase умеет <code>rollback</code>, но нужно явно описывать <code>&lt;rollback&gt;</code> в changeset. По умолчанию — отката нет</td></tr>
+    <tr><td>Hibernate validate падает на типы</td><td><code>timestamp(6)</code> vs <code>timestamp</code>. Указывай в миграции точный тип: <code>TIMESTAMP(6)</code></td></tr>
+    <tr><td>Liquibase пытается применить уже применённое</td><td>Смотри <code>databasechangelog</code> — если записи есть, Liquibase их пропустит. Если запись пропала — применит заново (может упасть)</td></tr>
+</table>
+
+<h2 id="mistakes">🐞 Частые ошибки на практике</h2>
+
+<div class="mistake">
+    <div class="mistake-title">1. Изменил применённый changeset</div>
+    Применил <code>001-create-events-table</code>, потом «доработал» — добавил колонку в тот же changeset. Liquibase видит несовпадение checksum и падает:
+    <pre><code>ValidationFailedException:
+  Migration checksum mismatch for changeset ...</code></pre>
+    <strong>Решение:</strong> никогда не трогай применённые changesets. Нужно изменение — <strong>новый</strong> changeset. Для dev можно очистить <code>databasechangelog</code> и БД полностью.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">2. Забыл <code>include</code> в master changelog</div>
+    Создал файл <code>002-...</code>, но не добавил <code>&lt;include file="..."/&gt;</code> в <code>db.changelog-master.xml</code>. Liquibase его <strong>не увидит</strong>. Приложение упадёт с <code>missing column</code>. <strong>Решение:</strong> всегда добавляй include в master.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">3. Миграция ПОСЛЕ кода — неправильный порядок</div>
+    Сначала добавил поле в <code>Event.java</code>, потом миграцию. При старте: Hibernate validate видит поле в модели, но не видит в БД → <strong>падает</strong>. <strong>Решение:</strong> сначала миграция (применяется при старте), потом модель в коде — либо оба в одном коммите, но миграция <strong>должна примениться до</strong> validate.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">4. <code>NOT NULL</code> на новую колонку без default</div>
+    <pre><code>&lt;column name="description" type="VARCHAR(1000)"&gt;
+    &lt;constraints nullable="false"/&gt;   &lt;!-- ❌ упадёт, если есть строки --&gt;
+&lt;/column&gt;</code></pre>
+    Если в таблице <strong>уже есть данные</strong>, а новая колонка <code>NOT NULL</code> без <code>defaultValue</code> — Liquibase не сможет её заполнить. <strong>Решение:</strong> 1) сделать колонку nullable, 2) добавить <code>defaultValue</code>, 3) в несколько миграций: добавить nullable → заполнить → сделать NOT NULL.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">5. <code>ddl-auto: update</code> забыли поменять на <code>validate</code></div>
+    Оставил <code>update</code> — Hibernate будет <strong>конкурировать</strong> с Liquibase. Может добавлять колонки, которых нет в миграциях. Рассинхрон схемы и миграций. <strong>Решение:</strong> с Liquibase — только <code>validate</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">6. Перепутал путь к файлу миграции</div>
+    <pre><code>&lt;include file="changes/001-create-events-table.xml"
+         relativeToChangelogFile="true"/&gt;   &lt;!-- ❌ путь относительно master --&gt;
+</code></pre>
+    <strong>Два режима:</strong> <code>relativeToChangelogFile="true"</code> — путь относительно master-файла, <code>="false"</code> — от корня classpath (<code>resources/</code>). Перепутаешь — файл не найдётся. <strong>Решение:</strong> используй <code>relativeToChangelogFile="false"</code> с полным путём от <code>resources/</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">7. Скопировал миграцию, но забыл поменять <code>id</code></div>
+    Скопировал <code>001-create-events-table</code>, переименовал файл, но оставил <code>id="001-create-events-table"</code>. Liquibase считает, что это <strong>та же миграция</strong>, не применяет новую. <strong>Решение:</strong> id changeset должен быть <strong>уникальным</strong>. Меняй id при копировании.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">8. Пропустил <code>author</code></div>
+    <pre><code>&lt;changeSet id="001"&gt;   &lt;!-- ❌ author обязателен --&gt;</code></pre>
+    Liquibase требует <code>id</code> и <code>author</code>. <strong>Решение:</strong> всегда указывай оба, лучше — привязка к <code>git config user.name</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">9. Продакшен-деплой с Liquibase + <code>down -v</code></div>
+    Локально привык делать <code>docker compose down -v</code> для сброса. На проде это <strong>удалит все данные</strong>. <strong>Решение:</strong> <code>-v</code> только локально. На проде — никогда.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">10. Ожидал, что Liquibase сам откатит миграции</div>
+    Liquibase <strong>не откатывает</strong> автоматически, если в changeset не описан <code>&lt;rollback&gt;</code>. По умолчанию при rollback — ошибка. <strong>Решение:</strong> для сложных миграций описывай <code>&lt;rollback&gt;</code> вручную. Для учебного проекта — не критично.
+</div>
+
+<h2 id="interview">❓ Вопросы на собеседование</h2>
+
+<p class="question">1. Почему <code>ddl-auto: update</code> — плохо для продакшена?</p>
+<div class="answer">
+    Hibernate с <code>update</code> принимает решения о схеме <strong>автоматически</strong>, без контроля. Проблемы: 1) никогда не удаляет колонки — мусор копится; 2) не понимает переименований — добавляет новую, старую оставляет; 3) <code>NOT NULL</code> без default упадёт на существующих данных; 4) нет истории изменений — нельзя понять, что менялось; 5) нет отката. В продакшене — только Liquibase/Flyway + <code>validate</code>.
+</div>
+
+<p class="question">2. Что такое Liquibase и зачем он нужен?</p>
+<div class="answer">
+    Liquibase — инструмент контроля версий схемы БД. <strong>Идея:</strong> схема — это код, он должен быть в Git, проходить ревью и применяться контролируемо. Liquibase читает changelog-файлы с миграциями, применяет только новые (отслеживает в <code>databasechangelog</code>), обеспечивает версионирование и откат. Аналогия: Git — для кода, Liquibase — для схемы БД.
+</div>
+
+<p class="question">3. Что такое changeset и какие правила с ним связаны?</p>
+<div class="answer">
+    Changeset — единица миграции с уникальной парой <code>id + author</code>. Правила: 1) <strong>иммутабельность</strong> — применённый changeset нельзя менять (иначе checksum mismatch); 2) изменение — только <strong>новым</strong> changeset; 3) уникальный <code>id</code> — копируя, меняй; 4) при необходимости отката — описывай <code>&lt;rollback&gt;</code> явно. Liquibase хранит все применённые в таблице <code>databasechangelog</code>.
+</div>
+
+<p class="question">4. Что делает <code>ddl-auto: validate</code> и почему это полезно?</p>
+<div class="answer">
+    <code>validate</code> заставляет Hibernate при старте <strong>сверить</strong> Java-модель со схемой БД. Если что-то не совпадает (нет таблицы, нет колонки, не тот тип) — приложение <strong>падает</strong>. Это защита от рассинхрона: невозможно выкатить код, ожидающий колонку, не применив миграцию. В продакшене — стандарт: <code>validate</code> + миграции через Liquibase.
+</div>
+
+<p class="question">5. Зачем таблица <code>databasechangelog</code>?</p>
+<div class="answer">
+    Liquibase ведёт историю применённых миграций: <code>id</code>, <code>author</code>, <code>filename</code>, <code>dateexecuted</code>, <code>checksum</code>. При старте читает её и применяет <strong>только новые</strong> changeset'ы. Плюс: считает <code>checksum</code> — если применённый changeset изменили, старт упадёт. Ещё есть <code>databasechangeloglock</code> — блокировки, чтобы два инстанса не применили одно и то же одновременно.
+</div>
+
+<p class="question">6. Как правильно добавить новую колонку в проде?</p>
+<div class="answer">
+    Порядок: 1) создаём <strong>новую</strong> миграцию <code>addColumn</code> (не трогая старые); 2) добавляем в master changelog; 3) обновляем Java-модель (<code>@Entity</code>); 4) коммитим в Git; 5) деплоим. При старте Liquibase применит миграцию до того, как Hibernate с <code>validate</code> проверит схему. Если колонка <code>NOT NULL</code> — используй трюк: сначала nullable → заполнить данные → сделать NOT NULL, иначе упадёт на существующих строках.
+</div>
+
+<p class="question">7. Как откатить миграцию в Liquibase?</p>
+<div class="answer">
+    Через команду <code>liquibase rollback</code> или в Spring Boot — свойство <code>spring.liquibase.rollback-...</code>. Но <strong>автоматического отката нет</strong> — нужно явно описать тег <code>&lt;rollback&gt;</code> в changeset. Без него Liquibase не знает, как откатить. Плюс — честно говоря, в реальных проектах откат миграций <strong>используется редко</strong>: обычно откатывают деплой, а данные остаются. Поэтому для большинства проектов rollback — «на случай».
+</div>
+
+<p class="question">8. Liquibase или Flyway — что выбрать?</p>
+<div class="answer">
+    Оба — инструменты миграций. <strong>Liquibase:</strong> больше форматов (XML, YAML, JSON, SQL), кросс-БД, богаче возможности (контексты, labels, preconditions). <strong>Flyway:</strong> проще, работает «из коробки» с SQL-файлами, популярнее в небольших проектах. В enterprise чаще Liquibase — из-за гибкости. Оба — стандарт индустрии, выбор часто зависит от команды. В нашем проекте — Liquibase, потому что он лучше подходит для сложных схем.
+</div>
+
+<h2 id="checklist">📌 Чеклист самопроверки</h2>
+
+<ul class="checklist">
+    <li>Понимаю, почему <code>ddl-auto: update</code> — плохо для прода</li>
+    <li>Liquibase подключён и работает</li>
+    <li>Знаю структуру: master changelog + отдельные файлы миграций</li>
+    <li>Умею писать <code>createTable</code> и <code>addColumn</code></li>
+    <li>Понимаю правила changeset (id + author, иммутабельность, checksum)</li>
+    <li>Знаю служебные таблицы <code>databasechangelog</code> / <code>databasechangeloglock</code></li>
+    <li><code>ddl-auto: validate</code> настроен</li>
+    <li>Понимаю порядок деплоя: миграция → код → validate</li>
+    <li>Умею добавить колонку через миграцию, не ломая существующие данные</li>
+    <li>Знаю, что нельзя менять применённый changeset</li>
+</ul>
+
+</body>
+</html>
