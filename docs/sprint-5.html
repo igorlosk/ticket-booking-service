@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <title>Спринт 5 — OpenAPI / Swagger</title>
+    <style>
+        body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Arial, sans-serif; max-width: 900px; margin: 40px auto; padding: 20px; line-height: 1.6; color: #24292e; }
+        h1 { color: #0366d6; border-bottom: 2px solid #0366d6; padding-bottom: 8px; margin-top: 40px; }
+        h2 { color: #24292e; border-bottom: 1px solid #e1e4e8; padding-bottom: 6px; margin-top: 32px; }
+        h3 { color: #24292e; margin-top: 24px; }
+        code { background: #f6f8fa; padding: 2px 6px; border-radius: 4px; font-family: "SF Mono", Monaco, Consolas, monospace; font-size: 0.9em; color: #d73a49; }
+        pre { background: #f6f8fa; padding: 16px; border-radius: 6px; overflow-x: auto; border-left: 4px solid #0366d6; font-size: 0.9em; line-height: 1.45; }
+        pre code { background: none; padding: 0; color: #24292e; }
+        table { border-collapse: collapse; width: 100%; margin: 16px 0; }
+        th, td { border: 1px solid #d1d5da; padding: 8px 12px; text-align: left; }
+        th { background: #f6f8fa; font-weight: 600; }
+        blockquote { border-left: 4px solid #0366d6; padding-left: 16px; color: #6a737d; margin: 16px 0; font-style: italic; }
+        .checklist { list-style: none; padding-left: 0; }
+        .checklist li::before { content: "☐ "; color: #0366d6; font-weight: bold; }
+        .answer { background: #f0fff4; border-left: 4px solid #28a745; padding: 12px 16px; margin: 8px 0; }
+        .question { font-weight: 600; color: #0366d6; margin-top: 20px; }
+        .toc { background: #f6f8fa; padding: 16px 24px; border-radius: 6px; }
+        .toc a { color: #0366d6; text-decoration: none; }
+        .meta { color: #6a737d; font-size: 0.9em; font-style: italic; margin-bottom: 24px; }
+        .mistake { background: #ffeef0; border-left: 4px solid #d73a49; padding: 12px 16px; margin: 12px 0; }
+        .mistake-title { font-weight: 600; color: #d73a49; margin-bottom: 6px; }
+        .flow-diagram { background: #f6f8fa; padding: 20px; border-radius: 6px; font-family: monospace; line-height: 1.8; margin: 16px 0; white-space: pre; overflow-x: auto; }
+        @media print { body { margin: 0; max-width: 100%; } h1 { page-break-before: always; } h1:first-of-type { page-break-before: avoid; } pre { page-break-inside: avoid; } table { page-break-inside: avoid; } .mistake { page-break-inside: avoid; } }
+    </style>
+</head>
+<body>
+
+<h1>Спринт 5: OpenAPI / Swagger</h1>
+
+<p class="meta">Проект: <strong>Ticket Booking Service</strong> · Стек: SpringDoc OpenAPI 2.6.x, Swagger UI, OpenAPI 3.1</p>
+
+<div class="toc">
+    <strong>Содержание</strong>
+    <ol>
+        <li><a href="#goals">Цели спринта</a></li>
+        <li><a href="#theory">Теория</a></li>
+        <li><a href="#steps">Пошаговая инструкция</a></li>
+        <li><a href="#pitfalls">Подводные камни</a></li>
+        <li><a href="#mistakes">Частые ошибки на практике</a></li>
+        <li><a href="#interview">Вопросы на собеседование</a></li>
+        <li><a href="#checklist">Чеклист самопроверки</a></li>
+    </ol>
+</div>
+
+<h2 id="goals">🎯 Цели спринта</h2>
+<ul>
+    <li>Подключить SpringDoc OpenAPI — библиотеку автогенерации документации</li>
+    <li>Настроить метаданные API (название, версия, контакты, лицензия)</li>
+    <li>Увидеть Swagger UI в браузере</li>
+    <li>Освоить аннотации <code>@Operation</code>, <code>@ApiResponse</code>, <code>@Parameter</code>, <code>@Schema</code>, <code>@Tag</code></li>
+    <li>Документировать DTO</li>
+    <li>Понять разницу между автогенерируемой и ручной документацией</li>
+</ul>
+
+<h2 id="theory">📚 Теория</h2>
+
+<h3>Что такое OpenAPI</h3>
+
+<p><strong>OpenAPI</strong> (ранее Swagger) — <strong>стандарт описания REST API</strong> в формате YAML/JSON. Спецификация описывает:</p>
+<ul>
+    <li>Эндпоинты (<code>GET /api/v1/events</code>)</li>
+    <li>Параметры (path, query, headers, body)</li>
+    <li>Ответы (статусы, схемы JSON)</li>
+    <li>Схемы DTO</li>
+    <li>Аутентификацию</li>
+</ul>
+
+<p>Стандарт де-факто — его читают Postman, Insomnia, code generators, API gateways.</p>
+
+<h3>Swagger UI vs OpenAPI</h3>
+
+<table>
+    <tr><th>Понятие</th><th>Что это</th></tr>
+    <tr><td><strong>OpenAPI</strong></td><td>Спецификация — файл <code>.json</code> / <code>.yaml</code> с описанием API</td></tr>
+    <tr><td><strong>Swagger UI</strong></td><td>Веб-интерфейс, который читает спецификацию и рисует интерактивную страницу</td></tr>
+</table>
+
+<blockquote>Это не одно и то же. OpenAPI — стандарт, Swagger UI — визуализация.</blockquote>
+
+<h3>SpringDoc OpenAPI</h3>
+
+<div class="flow-diagram">SpringDoc сканирует контроллеры Spring
+    ↓
+    Автоматически генерит OpenAPI-спецификацию
+    ↓
+    Поднимает Swagger UI на /swagger-ui.html
+    ↓
+    Отдаёт спецификацию на /v3/api-docs</div>
+
+<p><strong>Зависимость:</strong></p>
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springdoc&lt;/groupId&gt;
+    &lt;artifactId&gt;springdoc-openapi-starter-webmvc-ui&lt;/artifactId&gt;
+    &lt;version&gt;2.6.0&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+
+<p><strong>Альтернативы:</strong></p>
+<ul>
+    <li><strong>Springfox</strong> — старая библиотека, давно не поддерживается, не используем</li>
+    <li><strong>springdoc-openapi</strong> — современный стандарт, работает со Spring Boot 3.x</li>
+</ul>
+
+<h3>Что даётся бесплатно (без аннотаций)</h3>
+
+<p>SpringDoc находит:</p>
+<ul>
+    <li>Все <code>@RestController</code></li>
+    <li>Пути из <code>@GetMapping</code>, <code>@PostMapping</code></li>
+    <li>Параметры <code>@PathVariable</code>, <code>@RequestParam</code>, <code>@RequestBody</code></li>
+    <li>Схемы DTO из <code>record</code> / классов</li>
+    <li>Коды ответов из <code>@ResponseStatus</code> и <code>ResponseEntity</code></li>
+</ul>
+
+<p><strong>Аннотации нужны для:</strong> описаний, примеров, дополнительных кодов ответов, скрытия служебных эндпоинтов.</p>
+
+<h3>Ключевые аннотации</h3>
+
+<table>
+    <tr><th>Аннотация</th><th>Где</th><th>Что описывает</th></tr>
+    <tr><td><code>@Tag</code></td><td>Класс</td><td>Группа эндпоинтов в UI</td></tr>
+    <tr><td><code>@Operation</code></td><td>Метод</td><td>Summary + description эндпоинта</td></tr>
+    <tr><td><code>@ApiResponse</code></td><td>Метод</td><td>Один HTTP-ответ (код + описание)</td></tr>
+    <tr><td><code>@ApiResponses</code></td><td>Метод</td><td>Обёртка для нескольких <code>@ApiResponse</code></td></tr>
+    <tr><td><code>@Parameter</code></td><td>Параметр</td><td>Описание параметра</td></tr>
+    <tr><td><code>@Schema</code></td><td>DTO / поле</td><td>Описание DTO или поля</td></tr>
+    <tr><td><code>@ParameterObject</code></td><td>Параметр</td><td>Развернуть объект (например, <code>Pageable</code>) в набор query-параметров</td></tr>
+    <tr><td><code>@Hidden</code></td><td>Класс/метод</td><td>Скрыть из документации</td></tr>
+    <tr><td><code>@SecurityRequirement</code></td><td>Класс/метод</td><td>Требует аутентификации (пригодится в Спринте 6)</td></tr>
+</table>
+
+<p><strong>⚠️ Важно про импорты:</strong> <code>@ApiResponse</code> есть в двух пакетах:</p>
+<ul>
+    <li><code>io.swagger.v3.oas.annotations.responses.ApiResponse</code> ✅ (правильный, OpenAPI 3)</li>
+    <li><code>io.swagger.annotations.ApiResponse</code> ❌ (старый, Swagger 2, Springfox)</li>
+</ul>
+
+<h3>Метаданные API</h3>
+
+<p><strong><code>@Bean OpenAPI</code></strong> — общая информация об API: название, версия, описание, контакты, лицензия, серверы.</p>
+
+<h2 id="steps">💻 Пошаговая инструкция</h2>
+
+<h3>Шаг 1. Зависимость в <code>pom.xml</code></h3>
+
+<pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springdoc&lt;/groupId&gt;
+    &lt;artifactId&gt;springdoc-openapi-starter-webmvc-ui&lt;/artifactId&gt;
+    &lt;version&gt;2.6.0&lt;/version&gt;
+&lt;/dependency&gt;</code></pre>
+
+<p>Версию указываем явно — SpringDoc не управляется Spring Boot parent.</p>
+
+<h3>Шаг 2. Настройка <code>application.yml</code></h3>
+
+<pre><code>springdoc:
+  api-docs:
+    path: /v3/api-docs
+  swagger-ui:
+    path: /swagger-ui.html
+    operations-sorter: method
+    tags-sorter: alpha
+  show-actuator: false</code></pre>
+
+<h3>Шаг 3. Класс метаданных <code>OpenApiConfig</code></h3>
+
+<pre><code>package com.loskutnikov.booking.config;
+
+import io.swagger.v3.oas.models.OpenAPI;
+import io.swagger.v3.oas.models.info.Contact;
+import io.swagger.v3.oas.models.info.Info;
+import io.swagger.v3.oas.models.info.License;
+import org.springframework.context.annotation.Bean;
+import org.springframework.context.annotation.Configuration;
+
+@Configuration
+public class OpenApiConfig {
+
+    @Bean
+    public OpenAPI ticketBookingOpenAPI() {
+        return new OpenAPI()
+                .info(new Info()
+                        .title("Ticket Booking Service API")
+                        .description("REST API for booking tickets to events")
+                        .version("v1")
+                        .contact(new Contact()
+                                .name("Igor Loskutnikov")
+                                .email("igor@losku.ru")
+                                .url("https://github.com/igorlosk"))
+                        .license(new License()
+                                .name("MIT License")
+                                .url("https://opensource.org/licenses/MIT")));
+    }
+}</code></pre>
+
+<h3>Шаг 4. Аннотации на контроллере</h3>
+
+<pre><code>@RestController
+@RequestMapping("/api/v1/events")
+@Tag(name = "Events", description = "Operations for managing events")
+public class EventController {
+
+    @PostMapping
+    @Operation(
+            summary = "Create a new event",
+            description = "Creates a new event with status AVAILABLE"
+    )
+    @ApiResponses({
+            @ApiResponse(responseCode = "201", description = "Event created successfully"),
+            @ApiResponse(responseCode = "400", description = "Invalid request body")
+    })
+    public ResponseEntity&lt;EventResponse&gt; create(@Valid @RequestBody CreateEventRequest request) { ... }
+
+    @GetMapping
+    @Operation(summary = "Get all events")
+    @ApiResponse(responseCode = "200", description = "List of events")
+    public Page&lt;EventResponse&gt; findAll(@ParameterObject Pageable pageable) { ... }
+
+    @GetMapping("/{id}")
+    @Operation(summary = "Get event by id")
+    @ApiResponses({
+            @ApiResponse(responseCode = "200", description = "Event found"),
+            @ApiResponse(responseCode = "404", description = "Event not found")
+    })
+    public EventResponse findById(
+            @Parameter(description = "Event id", example = "1")
+            @PathVariable Long id) { ... }
+}</code></pre>
+
+<h3>Шаг 5. Аннотации на DTO</h3>
+
+<pre><code>@Schema(description = "Event response")
+public record EventResponse(
+        @Schema(description = "Unique identifier", example = "1")
+        Long id,
+
+        @Schema(description = "Event name", example = "Rock Concert")
+        String name,
+
+        @Schema(description = "Event date and time", example = "2027-03-15T20:00:00")
+        LocalDateTime date,
+
+        @Schema(description = "Event venue", example = "Philharmonic Hall")
+        String venue,
+
+        @Schema(description = "Event status", example = "AVAILABLE")
+        Status status,
+
+        @Schema(description = "Event description", example = "Evening of smooth jazz")
+        String description
+) { ... }</code></pre>
+
+<h3>Шаг 6. Проверка</h3>
+
+<ul>
+    <li>Открыть <code>http://localhost:8080/swagger-ui/index.html</code> — UI с описанием</li>
+    <li>Открыть <code>http://localhost:8080/v3/api-docs</code> — OpenAPI JSON</li>
+    <li>Попробовать <strong>Try it out</strong> на любом эндпоинте — работает как Postman</li>
+</ul>
+
+<h2 id="pitfalls">⚠️ Подводные камни</h2>
+
+<table>
+    <tr><th>Проблема</th><th>Что делать</th></tr>
+    <tr><td>Swagger UI 404</td><td>Проверь зависимость. Только <code>springdoc-openapi-starter-webmvc-ui</code> даёт UI</td></tr>
+    <tr><td>500 на <code>/v3/api-docs</code></td><td>Частая причина — <code>Pageable</code> без <code>@ParameterObject</code>. Добавь аннотацию</td></tr>
+    <tr><td>SpringDoc 2.x не работает со Spring Boot 3.5</td><td>Обнови SpringDoc до 2.6.0+ (совместимость — [springdoc.org](https://springdoc.org))</td></tr>
+    <tr><td><code>Page&lt;T&gt;</code> в UI выглядит непонятно</td><td>SpringDoc не всегда красиво рисует <code>Page</code>. Можно создать свою обёртку <code>PageResponse&lt;T&gt;</code></td></tr>
+    <tr><td>Служебные эндпоинты видны</td><td>Помечай <code>@Hidden</code></td></tr>
+    <tr><td>IDEA подсказывает неправильный импорт <code>@ApiResponse</code></td><td>Используй <code>io.swagger.v3.oas.annotations.responses.ApiResponse</code></td></tr>
+    <tr><td>Swagger UI заблокирован Spring Security</td><td>Разреши доступ к <code>/swagger-ui/**</code> и <code>/v3/api-docs/**</code> в Security Config (актуально для Спринта 6)</td></tr>
+</table>
+
+<h2 id="mistakes">🐞 Частые ошибки на практике</h2>
+
+<div class="mistake">
+    <div class="mistake-title">1. Забыли <code>@ParameterObject</code> на <code>Pageable</code></div>
+    <pre><code>public Page&lt;EventResponse&gt; findAll(Pageable pageable)   // ❌ /v3/api-docs → 500
+</code></pre>
+    Без <code>@ParameterObject</code> SpringDoc пытается развернуть <code>Pageable</code> как один объект и падает. <strong>Решение:</strong> <code>@ParameterObject Pageable pageable</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">2. Импорт <code>@ApiResponse</code> из Swagger 2</div>
+    <pre><code>import io.swagger.annotations.ApiResponse;   // ❌ старый, не работает
+import io.swagger.v3.oas.annotations.responses.ApiResponse;  // ✅
+</code></pre>
+    IDEA часто подсказывает неправильный. Компилируется, но игнорируется SpringDoc. <strong>Решение:</strong> явно используй <code>v3.oas</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">3. Версия SpringDoc не указана</div>
+    <pre><code>&lt;dependency&gt;
+    &lt;groupId&gt;org.springdoc&lt;/groupId&gt;
+    &lt;artifactId&gt;springdoc-openapi-starter-webmvc-ui&lt;/artifactId&gt;
+    &lt;!-- нет version — Maven не найдёт artifact --&gt;
+&lt;/dependency&gt;
+</code></pre>
+    SpringDoc — отдельный проект, не управляется Spring Boot parent. <strong>Решение:</strong> указывай <code>&lt;version&gt;2.6.0&lt;/version&gt;</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">4. Несовместимая версия SpringDoc со Spring Boot</div>
+    Spring Boot 3.5.x требует SpringDoc <strong>2.6.0+</strong>. Если у тебя 2.3.0 — увидишь 500 на <code>/v3/api-docs</code>. <strong>Решение:</strong> сверься с [таблицей совместимости](https://springdoc.org).
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">5. Документирование через <code>@ApiResponse</code> только успешного ответа</div>
+    <pre><code>@ApiResponse(responseCode = "200", description = "OK")   // только 200
+</code></pre>
+    Клиент не знает, что может быть 404. <strong>Решение:</strong> описывай <strong>все реалистичные</strong> коды (200 + 404, 201 + 400, и т.д.).
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">6. Забыли <code>@Tag</code> — эндпоинты в UI разбросаны</div>
+    SpringDoc по умолчанию сгенерирует имя группы из имени класса (<code>event-controller</code>). Работает, но некрасиво. <strong>Решение:</strong> <code>@Tag(name = "Events")</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">7. Не указаны примеры в <code>@Schema</code> / <code>@Parameter</code></div>
+    Примеры важны для клиента: он видит, какие данные ожидать. Особенно для новых API. <strong>Решение:</strong> используй <code>example = "..."</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">8. Swagger UI заблокирован Spring Security</div>
+    После Спринта 6 (Security) эндпоинты защищены — и Swagger UI тоже. Если не разрешить, UI вернёт 401. <strong>Решение:</strong> в SecurityConfig разрешить <code>/swagger-ui/**</code>, <code>/v3/api-docs/**</code>.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">9. Смешивание Swagger 2 и OpenAPI 3 аннотаций</div>
+    <code>@Api</code>, <code>@ApiOperation</code>, <code>@ApiParam</code> — из Swagger 2 (Springfox). <code>@Tag</code>, <code>@Operation</code>, <code>@Parameter</code> — из OpenAPI 3 (SpringDoc). <strong>Не смешивай.</strong> Для Spring Boot 3.x — только OpenAPI 3.
+</div>
+
+<div class="mistake">
+    <div class="mistake-title">10. Открытие через <code>/swagger-ui.html</code>, а не <code>/swagger-ui/index.html</code></div>
+    Работает через редирект, но в новых версиях основной путь — <code>/swagger-ui/index.html</code>. Если <code>html</code> возвращает 404 — попробуй индекс.
+</div>
+
+<h2 id="interview">❓ Вопросы на собеседование</h2>
+
+<p class="question">1. Что такое OpenAPI и Swagger UI?</p>
+<div class="answer">
+    <strong>OpenAPI</strong> — стандарт описания REST API в формате YAML/JSON. Описывает эндпоинты, параметры, ответы, схемы DTO, аутентификацию. <strong>Swagger UI</strong> — веб-интерфейс, который читает OpenAPI-спецификацию и рисует интерактивную документацию. Можно кликать эндпоинты и делать запросы прямо из UI. Это не одно и то же: OpenAPI — стандарт, Swagger UI — визуализация. Дополнительно есть Swagger Editor, Swagger Codegen.
+</div>
+
+<p class="question">2. Чем SpringDoc отличается от Springfox?</p>
+<div class="answer">
+    <strong>Springfox</strong> — старая библиотека (Swagger 2), <strong>не поддерживается</strong> с 2020 года, не совместима со Spring Boot 3.x. Использовала аннотации <code>@Api</code>, <code>@ApiOperation</code>, <code>@ApiParam</code>. <strong>SpringDoc</strong> — современная, работает с OpenAPI 3 и Spring Boot 3.x. Аннотации: <code>@Tag</code>, <code>@Operation</code>, <code>@Parameter</code>, <code>@Schema</code>. Для новых проектов — только SpringDoc.
+</div>
+
+<p class="question">3. Что генерируется автоматически, а что требует аннотаций?</p>
+<div class="answer">
+    <strong>Автоматически:</strong> пути эндпоинтов, HTTP-методы, <code>@PathVariable</code>/<code>@RequestParam</code>/<code>@RequestBody</code>, схемы DTO (поля и типы), коды ответов из <code>@ResponseStatus</code> и <code>ResponseEntity</code>. <strong>Требуют аннотаций:</strong> описания (summary/description), примеры значений, дополнительные коды ответов (404, 409), группировка (<code>@Tag</code>), скрытие (<code>@Hidden</code>), метаданные API (название, контакты, лицензия). То есть структура — бесплатно, смысл — вручную.
+</div>
+
+<p class="question">4. Что такое <code>@ParameterObject</code> и зачем он нужен?</p>
+<div class="answer">
+    <code>@ParameterObject</code> — аннотация SpringDoc, которая говорит: «этот параметр — не одно значение, а объект, разверни его в набор полей». Пример: <code>Pageable</code> содержит <code>page</code>, <code>size</code>, <code>sort</code>. Без аннотации SpringDoc пытается развернуть <code>Pageable</code> как единый объект и часто падает с 500. С <code>@ParameterObject</code> в Swagger UI появляются три отдельных query-параметра.
+</div>
+
+<p class="question">5. Как документировать DTO через OpenAPI?</p>
+<div class="answer">
+    Аннотацией <code>@Schema</code> на классе DTO (общее описание) и на каждом поле (описание + пример). Пример: <code>@Schema(description = "Event name", example = "Rock Concert")</code>. В Swagger UI под схемой появятся описания полей и примеры значений. Для enum SpringDoc сам подставит <code>Allowed values</code> из Java-типа.
+</div>
+
+<p class="question">6. Почему <code>@ApiResponse</code> нужно импортировать из <code>io.swagger.v3.oas.annotations.responses</code>?</p>
+<div class="answer">
+    Потому что есть <strong>два</strong> пакета с этим именем: 1) <code>io.swagger.v3.oas.annotations.responses.ApiResponse</code> — OpenAPI 3 (для SpringDoc, актуальный), 2) <code>io.swagger.annotations.ApiResponse</code> — Swagger 2 (для Springfox, устаревший). IDEA часто подсказывает неправильный. Код компилируется, но SpringDoc игнорирует старую аннотацию — описания не появляются в UI. Всегда проверяй импорт: <code>v3.oas</code>.
+</div>
+
+<p class="question">7. Как связаны OpenAPI и code generation?</p>
+<div class="answer">
+    OpenAPI-спецификация — <strong>машинно-читаемый формат</strong>. Из неё можно <strong>генерировать клиентов</strong> для TypeScript, Python, Java, Go через <strong>OpenAPI Generator</strong> или <strong>Swagger Codegen</strong>. Плюс: клиент всегда синхронизирован с API, меньше ошибок. Также из спецификации генерируют моки для тестов, API gateways конфигурируют маршрутизацию. Это одна из причин, почему OpenAPI — стандарт индустрии.
+</div>
+
+<p class="question">8. Что делать, если Swagger UI нужен, но API защищён Spring Security?</p>
+<div class="answer">
+    В <code>SecurityFilterChain</code> добавить разрешение для путей Swagger: <code>/swagger-ui/**</code>, <code>/swagger-ui.html</code>, <code>/v3/api-docs/**</code>, <code>/v3/api-docs.yaml</code>. Иначе UI покажет 401/403 при загрузке спецификации. Дополнительно можно требовать аутентификацию для самих API-эндпоинтов, но UI и спецификацию оставить публичными. Разберём в Спринте 6.
+</div>
+
+<h2 id="checklist">📌 Чеклист самопроверки</h2>
+
+<ul class="checklist">
+    <li>Понимаю разницу OpenAPI (спецификация) и Swagger UI (визуализация)</li>
+    <li>Знаю, что SpringDoc — современный стандарт для Spring Boot 3.x</li>
+    <li>Умею подключать <code>springdoc-openapi-starter-webmvc-ui</code></li>
+    <li>Настроил <code>OpenApiConfig</code> с метаданными API</li>
+    <li>Использую <code>@Tag</code> для группировки</li>
+    <li>Описываю эндпоинты через <code>@Operation</code></li>
+    <li>Описываю ответы через <code>@ApiResponses</code></li>
+    <li>Описываю параметры через <code>@Parameter</code> с <code>example</code></li>
+    <li>Документирую DTO через <code>@Schema</code></li>
+    <li>Использую <code>@ParameterObject</code> на <code>Pageable</code></li>
+    <li>Проверяю импорты — только <code>io.swagger.v3.oas.*</code></li>
+    <li>Проверил Try it out в Swagger UI</li>
+</ul>
+
+</body>
+</html>

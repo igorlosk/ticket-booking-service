@@ -45,3 +45,7 @@ springdoc:
     operations-sorter: method   # сортировка эндпоинтов по HTTP-методу
     tags-sorter: alpha          # сортировка тегов по алфавиту
   show-actuator: false          # не показывать actuator-эндпоинты (если будут)
+
+jwt:
+  secret: 404E635266556A586E3272357538782F413F4428472B4B6250645367566B5970
+  expiration-ms: 3600000
